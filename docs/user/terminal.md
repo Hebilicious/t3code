@@ -19,9 +19,12 @@ Jump to latest in the context menu returns to the current output.
 
 ## fish
 
-T3 Code starts terminals with fish's `no-query-term` feature, so fish 4.1 and
-later start without waiting for terminal replies. This turns off fish features
-that need those replies. To keep them, add `query-term` to `fish_features` in
-the environment that starts T3 Code; fish can then pause at startup. T3 Code's
-`fish_features` value replaces your universal one, so export any other flags you
-use there too.
+T3 Code starts fish with `no-query-term`, avoiding startup waits for terminal
+replies. This disables optional fish features that depend on those replies.
+T3 Code's exported `fish_features` also hides any universal flags you set with
+`set -U fish_features`.
+
+To preserve those flags or enable queries with `query-term`, include them in
+`fish_features` in the environment that launches T3 Code. A shell export applies
+when you launch T3 Code from that shell; it does not configure a desktop app
+launched from the Dock or Finder. Enabling queries can restore the startup wait.

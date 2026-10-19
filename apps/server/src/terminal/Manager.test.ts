@@ -2147,17 +2147,22 @@ it.layer(
 
   it.effect("turns off fish terminal queries unless the user chose query-term", () =>
     Effect.gen(function* () {
-      for (const [parentFeatures, expected] of [
-        [undefined, "no-query-term"],
-        ["qmark-noglob", "qmark-noglob,no-query-term"],
-        ["query-term", "query-term"],
-        ["no-query-term", "no-query-term"],
+      for (const [parentFeatures, runtimeFeatures, expected] of [
+        [undefined, undefined, "no-query-term"],
+        ["qmark-noglob", undefined, "qmark-noglob,no-query-term"],
+        ["qmark-noglob,query-term", undefined, "qmark-noglob,query-term"],
+        ["qmark-noglob,no-query-term", undefined, "qmark-noglob,no-query-term"],
+        ["query-term", "qmark-noglob", "qmark-noglob,no-query-term"],
       ] as const) {
         const { manager, ptyAdapter } = yield* createManager(5, {
           shellResolver: () => "/bin/sh",
           env: { fish_features: parentFeatures },
         });
-        yield* manager.open(openInput());
+        yield* manager.open(
+          openInput({
+            env: runtimeFeatures === undefined ? {} : { fish_features: runtimeFeatures },
+          }),
+        );
         expect(ptyAdapter.spawnInputs[0]?.env.fish_features).toBe(expected);
       }
     }),

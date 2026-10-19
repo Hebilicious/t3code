@@ -1283,10 +1283,10 @@ function createTerminalSpawnEnv(
   if (!spawnEnv.COLORTERM && runtimeEnv?.COLORTERM === undefined) {
     spawnEnv.COLORTERM = "truecolor";
   }
-  // fish 4.1+ blocks startup on a DA1 query that no renderer may be attached to answer yet.
-  // Turning off its terminal queries skips that wait; an explicit `query-term` choice wins.
-  const fishFeatures = spawnEnv.fish_features ?? "";
-  if (!/\bquery-term\b/.test(fishFeatures)) {
+  // fish 4.1+ can wait 10s at startup for a DA1 reply before a renderer can answer.
+  // Skip the query unless the user or provider already chose `query-term` or `no-query-term`.
+  const fishFeatures = spawnEnv.fish_features;
+  if (!fishFeatures?.includes("query-term")) {
     spawnEnv.fish_features = fishFeatures ? `${fishFeatures},no-query-term` : "no-query-term";
   }
   return stripAppImageRuntimeEnv(spawnEnv);
