@@ -1285,9 +1285,14 @@ function createTerminalSpawnEnv(
   }
   // fish 4.1+ can wait 10s at startup for a DA1 reply before a renderer can answer.
   // Skip the query unless the user or provider already chose `query-term` or `no-query-term`.
-  const fishFeatures = spawnEnv.fish_features;
+  const fishFeaturesKey =
+    platform === "win32"
+      ? (Object.keys(spawnEnv).find((candidate) => candidate.toLowerCase() === "fish_features") ??
+        "fish_features")
+      : "fish_features";
+  const fishFeatures = spawnEnv[fishFeaturesKey];
   if (!fishFeatures?.includes("query-term")) {
-    spawnEnv.fish_features = fishFeatures ? `${fishFeatures},no-query-term` : "no-query-term";
+    spawnEnv[fishFeaturesKey] = fishFeatures ? `${fishFeatures},no-query-term` : "no-query-term";
   }
   return stripAppImageRuntimeEnv(spawnEnv);
 }
