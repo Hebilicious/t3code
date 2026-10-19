@@ -220,8 +220,6 @@ describe("getChangedBrowserSettingLabels", () => {
   });
 
   it("treats a structurally equal viewport as unchanged", () => {
-    // The viewport is a tagged union, so identity comparison would report a
-    // freshly decoded copy of the default as dirty and offer to "restore" it.
     expect(
       getChangedBrowserSettingLabels({
         ...DEFAULT_UNIFIED_SETTINGS,
@@ -251,6 +249,7 @@ describe("getChangedBrowserSettingLabels", () => {
         browserRecordingShowMousePresses: true,
         browserLinkTarget: "app",
         browserAutoShowFloatingPreview: !DEFAULT_UNIFIED_SETTINGS.browserAutoShowFloatingPreview,
+        pullRequestLinksOpenInApp: false,
       }),
     ).toEqual([
       "Browser viewport",
@@ -261,6 +260,7 @@ describe("getChangedBrowserSettingLabels", () => {
       "Recording mouse presses",
       "Open links in",
       "Floating preview",
+      "Open pull requests in T3 Code",
     ]);
   });
 });

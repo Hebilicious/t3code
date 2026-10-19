@@ -10,7 +10,6 @@ export function AnimatedHeight({
   holdHeight = false,
 }: {
   readonly children: ReactNode;
-  /** Retain the previous content height while a replacement is loading. */
   readonly holdHeight?: boolean;
 }) {
   const contentRef = useRef<HTMLDivElement>(null);
@@ -27,7 +26,11 @@ export function AnimatedHeight({
       );
     }, HEIGHT_TRANSITION_FALLBACK_MS);
     return () => window.clearTimeout(timeoutId);
-  }, [heightState.height, heightState.isClipping]);
+  }, [
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- A height change mid-transition starts a new transition, so the fallback timer restarts.
+    heightState.height,
+    heightState.isClipping,
+  ]);
 
   useLayoutEffect(() => {
     if (holdHeight) return;
@@ -80,11 +83,14 @@ export function AnimatedHeight({
   return (
     <div
       data-slot="animated-height"
-      className="transition-[height] duration-200 ease-out motion-reduce:transition-none"
+      className="transition-[height] duration-200 ease-out motion-reduce:transition-none [overflow-clip-margin:2px]"
       style={
         heightState.height === null
           ? undefined
-          : { height: heightState.height, overflow: heightState.isClipping ? "hidden" : "visible" }
+          : {
+              height: heightState.height,
+              overflow: holdHeight || heightState.isClipping ? "clip" : "visible",
+            }
       }
       onTransitionEnd={(event) => {
         if (event.target !== event.currentTarget || event.propertyName !== "height") return;
