@@ -82,15 +82,19 @@ function fillSearchUrlTemplate(template: string, query: string): string {
 
 /**
  * Whether a custom search URL is an http(s) URL with `%s` where the query goes.
- * `%s` in the host is rejected: a query with spaces would make it unreachable.
+ * `%s` in the host or credentials is rejected: the query would never reach a
+ * search page, and a query with spaces would make the host unreachable.
  */
 export function isValidSearchUrlTemplate(template: string): boolean {
   if (!template.includes("%s")) return false;
   try {
-    // Two queries land on different hosts only when `%s` is in the host.
+    // Two queries land on different authorities only when `%s` sits before the path.
+    const authority = (url: URL) => `${url.username}:${url.password}@${url.host}`;
     const url = new URL(fillSearchUrlTemplate(template, "a"));
     const other = new URL(fillSearchUrlTemplate(template, "b"));
-    return (url.protocol === "http:" || url.protocol === "https:") && url.host === other.host;
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") && authority(url) === authority(other)
+    );
   } catch {
     return false;
   }

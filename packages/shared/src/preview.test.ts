@@ -83,6 +83,7 @@ describe("resolveSearchUrlTemplate", () => {
       "https://search.example/?q=",
       "javascript:alert('%s')",
       "https://%s.example.com/",
+      "https://%s@search.example/?q=%s",
     ]) {
       expect(
         resolveSearchUrlTemplate({ browserSearchEngine: "custom", browserCustomSearchUrl }),

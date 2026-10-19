@@ -747,9 +747,9 @@ function BrowserSearchEngineSetting() {
           title="Custom search URL"
           description="Use %s where the search terms go."
           status={
-            customUrl !== "" && !isValidSearchUrlTemplate(customUrl)
-              ? "Enter an http or https URL containing %s. Searches use DuckDuckGo until then."
-              : undefined
+            isValidSearchUrlTemplate(customUrl)
+              ? undefined
+              : "Enter an http or https URL containing %s. Searches use DuckDuckGo until then."
           }
           control={
             <DraftInput
