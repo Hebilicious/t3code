@@ -1625,6 +1625,63 @@ it.layer(NodeServices.layer)("AgentSessionScanner", (it) => {
 });
 
 describe("parseAgentSessionTranscript", () => {
+  it.each([
+    {
+      name: "claude -p",
+      source: "claudeAgent" as const,
+      records: [
+        {
+          type: "user",
+          sessionId: "claude-session",
+          entrypoint: "sdk-cli",
+          message: { role: "user", content: "Review this diff" },
+        },
+      ],
+    },
+    {
+      name: "codex exec",
+      source: "codex" as const,
+      records: [
+        { type: "session_meta", payload: { id: "codex-session", originator: "codex_exec" } },
+        {
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "Review this diff" }],
+          },
+        },
+      ],
+    },
+  ])("skips headless $name sessions", ({ source, records }) => {
+    const thread = AgentSessionScanner.parseAgentSessionTranscript({
+      contents: records.map((record) => JSON.stringify(record)).join("\n"),
+      source,
+      providerInstanceId: ProviderInstanceId.make(source),
+      fallbackSessionId: "fallback",
+      lastActiveAtMs: Date.parse("2026-08-24T12:00:00.000Z"),
+    });
+
+    expect(thread).toBeNull();
+  });
+
+  it("imports interactive Claude sessions", () => {
+    const thread = AgentSessionScanner.parseAgentSessionTranscript({
+      contents: JSON.stringify({
+        type: "user",
+        sessionId: "claude-session",
+        entrypoint: "cli",
+        message: { role: "user", content: "Review this diff" },
+      }),
+      source: "claudeAgent",
+      providerInstanceId: ProviderInstanceId.make("claudeAgent"),
+      fallbackSessionId: "fallback",
+      lastActiveAtMs: Date.parse("2026-08-24T12:00:00.000Z"),
+    });
+
+    expect(thread?.messages.map((message) => message.text)).toEqual(["Review this diff"]);
+  });
+
   it.each([false, true])(
     "handles the exact record limit and an interior blank overflow=%s",
     (overflow) => {

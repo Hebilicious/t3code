@@ -56,7 +56,8 @@ const RECENT_THREAD_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 // Screenshot-heavy transcripts can reach GiB; select fields while streaming to avoid allocating payloads.
 const MAX_IMPORTED_TRANSCRIPT_BYTES = 4 * 1024 * 1024 * 1024;
 const MAX_IMPORTED_MESSAGES = 200;
-const MAX_IMPORT_HISTORY_BYTES = 32 * 1024 * 1024;
+// Raised from 32 MiB so long Claude sessions (hundreds of MB of tool output) still import.
+const MAX_IMPORT_HISTORY_BYTES = 512 * 1024 * 1024;
 const MAX_IMPORT_BYTES = 4 * 1024 * 1024 * 1024;
 const MAX_IMPORT_TRANSCRIPTS = 100;
 const MAX_IMPORT_RECORDS = 100_000;
@@ -81,6 +82,7 @@ const TranscriptRecord = Schema.Struct({
   timestamp: Schema.optional(Schema.String),
   cwd: Schema.optional(Schema.String),
   sessionId: Schema.optional(Schema.String),
+  entrypoint: Schema.optional(Schema.String),
   aiTitle: Schema.optional(Schema.String),
   customTitle: Schema.optional(Schema.String),
   isSidechain: Schema.optional(Schema.Boolean),
@@ -96,6 +98,7 @@ const TranscriptRecord = Schema.Struct({
       message: Schema.optional(Schema.String),
       model: Schema.optional(Schema.String),
       cwd: Schema.optional(Schema.String),
+      originator: Schema.optional(Schema.String),
       content: Schema.optional(Schema.Array(TranscriptContentBlock)),
       internal_chat_message_metadata_passthrough: Schema.optional(Schema.Unknown),
     }),
@@ -402,10 +405,14 @@ function parseAgentSessionRecords(
     return false;
   };
 
+  // Headless runs (`claude -p`, `codex exec`) are started by scripts and other
+  // agents, not the user, so they are not conversations to import.
+  let headless = false;
   let recordIndex = -1;
   for (const record of records) {
     recordIndex += 1;
     if (input.source === "claudeAgent") {
+      if (record.entrypoint === "sdk-cli") headless = true;
       if (isHiddenClaudeRecord(record)) continue;
       if (record.type !== "user" && record.type !== "assistant") continue;
       const text = extractText(record.message?.content);
@@ -420,6 +427,7 @@ function parseAgentSessionRecords(
     }
 
     if (record.type === "session_meta") {
+      if (record.payload?.originator === "codex_exec") headless = true;
       const sessionId = record.payload?.id?.trim() || record.payload?.session_id?.trim();
       if (!hasCodexSessionId && sessionId) {
         providerSessionId = sessionId;
@@ -479,7 +487,9 @@ function parseAgentSessionRecords(
   const visibleMessages = messages.map(
     ({ codexResponseUser: _codexResponseUser, ...message }) => message,
   );
-  if (providerSessionId.trim().length === 0 || firstUserMessage === undefined) return null;
+  if (headless || providerSessionId.trim().length === 0 || firstUserMessage === undefined) {
+    return null;
+  }
   const firstUserMessageRetained = messages.includes(firstUserMessage);
   const { codexResponseUser: _codexResponseUser, ...visibleFirstUserMessage } = firstUserMessage;
   const retainedMessages = firstUserMessageRetained
@@ -831,7 +841,7 @@ export const make = Effect.gen(function* () {
               recordBytes += bytes;
               if (historyBytes + recordBytes > MAX_IMPORT_HISTORY_BYTES) {
                 throw new TranscriptJsonLimitError(
-                  "Transcript selected history exceeds the 32 MiB memory budget",
+                  "Transcript selected history exceeds the 512 MiB memory budget",
                 );
               }
             };
