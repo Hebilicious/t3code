@@ -7530,9 +7530,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
           nativeThreadId: `pending:${runId}`,
         });
       const legacyImportHandoff = shouldPrepareLegacyImportHandoff({
-        hasNativeHistory:
-          activeProviderThread?.driver === "acpRegistry" &&
-          activeProviderThread.nativeThreadRef !== null,
+        // An imported session resumes with its native history (ACP registry,
+        // Claude Code, Codex), so replaying the imported transcript would duplicate it.
+        hasNativeHistory: activeProviderThread?.nativeThreadRef != null,
         historyOrigin: projection.thread.historyOrigin,
         hasCompletedRun: latestCompletedRun !== undefined,
         legacyImportItemCount: legacyImportItems.length,
