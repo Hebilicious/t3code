@@ -1501,6 +1501,10 @@ export const layer: Layer.Layer<
               .map((turn) => turn.ordinal),
           ) + 1,
         nativeThreadHasTurns:
+          // A session imported from Claude Code or Codex (agent-session import)
+          // already holds its history natively, so it is resumed, not created.
+          (projection.thread.historyOrigin === "v1_import" &&
+            runningProviderThread.nativeThreadRef !== null) ||
           nativeInputRunIds.size > 0 ||
           (legacyInputRunIds.size > 0 &&
             sameNativeThread &&
