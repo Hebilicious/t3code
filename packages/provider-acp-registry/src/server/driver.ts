@@ -50,6 +50,7 @@ import {
   listAcpRegistryProviders,
   logoutAcpRegistry,
   probeAcpRegistryConfiguration,
+  readAcpRegistrySessionHistory,
   setAcpRegistryProvider,
 } from "./probe.ts";
 import * as AcpRegistrySupport from "./AcpRegistrySupport.ts";
@@ -815,6 +816,16 @@ export const AcpRegistryDriver: ProviderDriver<AcpRegistrySettings, AcpRegistryD
         deleteSession: ({ cwd, sessionId }) =>
           provideAcpManagementServices(
             deleteAcpRegistrySession({
+              instanceId,
+              settings: effectiveConfig,
+              cwd,
+              environment: processEnvironment,
+              sessionId,
+            }),
+          ),
+        readSessionHistory: ({ cwd, sessionId }) =>
+          provideAcpManagementServices(
+            readAcpRegistrySessionHistory({
               instanceId,
               settings: effectiveConfig,
               cwd,

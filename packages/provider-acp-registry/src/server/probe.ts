@@ -460,7 +460,7 @@ export const probeAcpRegistryConfiguration = Effect.fn("AcpRegistryProbe.probeCo
 const MANAGEMENT_TIMEOUT = Duration.seconds(60);
 
 const makeAcpRegistryManagementRuntime = Effect.fn("AcpRegistryProbe.makeManagementRuntime")(
-  function* (input: AcpRegistryManagementInput) {
+  function* (input: AcpRegistryManagementInput & { readonly loadSessionId?: string }) {
     const catalog = yield* AcpRegistrySupport.AcpRegistryCatalog;
     const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const crypto = yield* Crypto.Crypto;
@@ -483,6 +483,10 @@ const makeAcpRegistryManagementRuntime = Effect.fn("AcpRegistryProbe.makeManagem
         clientInfo: { name: "t3-code-session-manager", version: "0.0.0" },
         authenticateOnAuthRequired: false,
         ...(input.settings.authMethodId ? { authMethodId: input.settings.authMethodId } : {}),
+        // Starting the runtime then loads this session instead of creating one.
+        ...(input.loadSessionId === undefined
+          ? {}
+          : { resumeSessionId: input.loadSessionId, resumeMethod: "load" as const }),
       }).pipe(
         Layer.provide(
           Layer.mergeAll(
@@ -640,6 +644,82 @@ export const listAcpRegistrySessions = Effect.fn("AcpRegistryProbe.listSessions"
           ),
       }),
       Effect.mapError((error) => managementFailure("list", error)),
+    ),
+);
+
+export interface AcpRegistrySessionHistoryMessage {
+  readonly role: "user" | "assistant";
+  readonly text: string;
+}
+
+/**
+ * Load a saved session in a short-lived agent process and collect the user and
+ * assistant messages the agent replays, so an imported thread can show them.
+ * Thoughts and tool calls are left out, like the Claude and Codex imports.
+ */
+export const readAcpRegistrySessionHistory = Effect.fn("AcpRegistryProbe.readSessionHistory")(
+  function* (input: AcpRegistryManagementInput & { readonly sessionId: string }) {
+    const runtime = yield* makeAcpRegistryManagementRuntime({
+      ...input,
+      loadSessionId: input.sessionId,
+    });
+    const messages: Array<{ role: "user" | "assistant"; text: string; key: string | null }> = [];
+    yield* runtime.handleSessionUpdate((notification) =>
+      Effect.sync(() => {
+        if (notification.sessionId !== input.sessionId) return;
+        const update = notification.update;
+        if (
+          update.sessionUpdate !== "user_message_chunk" &&
+          update.sessionUpdate !== "agent_message_chunk"
+        ) {
+          return;
+        }
+        if (update.content.type !== "text") return;
+        const role = update.sessionUpdate === "user_message_chunk" ? "user" : "assistant";
+        const key = update.messageId ?? null;
+        const last = messages.at(-1);
+        // Chunks of one message share a role, and a message id when the agent sends one.
+        if (last !== undefined && last.role === role && (key === null || last.key === key)) {
+          last.text += update.content.text;
+        } else {
+          messages.push({ role, text: update.content.text, key });
+        }
+      }),
+    );
+    // start() loads the session (session/load); runtime.loadSession would first
+    // create an empty session with session/new. An agent may replay the history
+    // and then fail to resume the session (dsh does when the session's model is
+    // no longer configured). The history is still what was asked for.
+    yield* runtime
+      .start()
+      .pipe(Effect.catch((error) => (messages.length > 0 ? Effect.void : Effect.fail(error))));
+    return messages.flatMap(({ role, text }): Array<AcpRegistrySessionHistoryMessage> => {
+      const trimmed = text.trim();
+      return trimmed.length === 0 ? [] : [{ role, text: trimmed }];
+    });
+  },
+  (effect) =>
+    effect.pipe(
+      Effect.scoped,
+      Effect.timeoutOrElse({
+        duration: MANAGEMENT_TIMEOUT,
+        orElse: () =>
+          Effect.fail(
+            new AcpRegistryOperationError({
+              reason: "session_import_failed",
+              message: "Loading the ACP session history timed out.",
+            }),
+          ),
+      }),
+      Effect.mapError((error) =>
+        error._tag === "AcpRegistryOperationError"
+          ? error
+          : new AcpRegistryOperationError({
+              reason: "session_import_failed",
+              message: "Could not load the ACP session history.",
+              cause: error,
+            }),
+      ),
     ),
 );
 

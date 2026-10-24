@@ -401,7 +401,31 @@ const make = Effect.gen(function* () {
     return { importedCount, skippedCount } satisfies AgentSessionImportResult;
   });
 
-  return { importRecentAgentThreads };
+  /**
+   * Add the messages of a session imported from another agent (an ACP agent's
+   * replayed history) to its thread, the way imported Claude and Codex
+   * transcripts are stored.
+   */
+  const appendImportedHistory = Effect.fn("appendImportedHistoryV2")(function* (input: {
+    readonly threadId: ThreadId;
+    readonly messages: ReadonlyArray<
+      Omit<AgentSessionScanner.AgentSessionThreadMessage, "createdAt">
+    >;
+    readonly createdAt: string;
+  }) {
+    if (input.messages.length === 0) return;
+    yield* eventSink.write({
+      events: input.messages.flatMap((message, index) =>
+        messageEvents({
+          threadId: input.threadId,
+          index,
+          message: { ...message, createdAt: input.createdAt },
+        }),
+      ),
+    });
+  });
+
+  return { importRecentAgentThreads, appendImportedHistory };
 });
 
 type AgentSessionImporterShape = Effect.Success<typeof make>;

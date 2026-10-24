@@ -57,6 +57,14 @@ export interface ProviderInstance {
       readonly cwd: string;
       readonly cursor?: string;
     }) => Effect.Effect<AcpRegistryListSessionsResult, AcpRegistryOperationError>;
+    /** User and assistant messages of a saved session, as the agent replays them on load. */
+    readonly readSessionHistory: (input: {
+      readonly cwd: string;
+      readonly sessionId: string;
+    }) => Effect.Effect<
+      ReadonlyArray<{ readonly role: "user" | "assistant"; readonly text: string }>,
+      AcpRegistryOperationError
+    >;
     readonly logout: (cwd: string) => Effect.Effect<void, AcpRegistryOperationError>;
     readonly deleteSession: (input: {
       readonly cwd: string;

@@ -104,11 +104,17 @@ export const layer: Layer.Layer<
             Option.isSome(targetAdapter) &&
             Option.isSome(currentInstance) &&
             (currentSession !== undefined || currentProviderThread !== undefined)
-              ? yield* targetAdapter.value.planSelectionTransition({
-                  current,
-                  target: targetModelSelection,
-                  sessionCapabilities: negotiatedCapabilities ?? currentInstance.value.capabilities,
-                })
+              ? negotiatedCapabilities === undefined
+                ? // No session has run for this thread yet (an imported native
+                  // thread): the next session starts on the new model, so there
+                  // is no in-session switch for the instance's static
+                  // capabilities to rule out.
+                  ({ type: "apply_on_next_turn" } as const)
+                : yield* targetAdapter.value.planSelectionTransition({
+                    current,
+                    target: targetModelSelection,
+                    sessionCapabilities: negotiatedCapabilities,
+                  })
               : undefined;
           const transition =
             Option.isNone(targetInstance) || Option.isNone(targetAdapter)

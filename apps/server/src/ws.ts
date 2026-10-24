@@ -1477,13 +1477,59 @@ export const layerWsRpc = (
         return { ...listed, sessions };
       });
 
+      // An imported ACP thread starts empty: the agent only replays its history
+      // when the session is loaded. Load it once and store the messages, so the
+      // thread shows them like an imported Claude or Codex transcript. Failing
+      // to do so leaves the thread empty but still imported.
+      const importAcpRegistrySessionHistory = (input: {
+        readonly threadId: ThreadId;
+        readonly manager: Effect.Success<ReturnType<typeof acpSessionManager>>["manager"];
+        readonly cwd: string;
+        readonly sessionId: string;
+        readonly updatedAt: string | null | undefined;
+      }) =>
+        Effect.gen(function* () {
+          const projection = yield* threadManagement.getThreadProjection(input.threadId);
+          if (projection.messages.length > 0) return;
+          const messages = yield* input.manager.readSessionHistory({
+            cwd: input.cwd,
+            sessionId: input.sessionId,
+          });
+          const now = yield* DateTime.now;
+          const updatedAt =
+            input.updatedAt === null || input.updatedAt === undefined
+              ? Option.none<DateTime.Utc>()
+              : DateTime.make(input.updatedAt);
+          const createdAt = DateTime.formatIso(Option.getOrElse(updatedAt, () => now));
+          yield* agentSessionImporter.appendImportedHistory({
+            threadId: input.threadId,
+            messages,
+            createdAt,
+          });
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("Could not import the ACP session history", {
+              threadId: input.threadId,
+              cause,
+            }),
+          ),
+        );
+
       const importAcpRegistrySession = Effect.fn("ws.acpRegistry.importSession")(function* (
         input: AcpRegistryImportSessionInput,
       ) {
         return yield* acpRegistryRuntimeCoordinator.withSessionMutation(
           Effect.gen(function* () {
-            yield* acpRegistryProject(input.projectId);
-            const { instance } = yield* acpSessionManager(input.instanceId);
+            const project = yield* acpRegistryProject(input.projectId);
+            const { instance, manager } = yield* acpSessionManager(input.instanceId);
+            const importHistory = (threadId: ThreadId) =>
+              importAcpRegistrySessionHistory({
+                threadId,
+                manager,
+                cwd: project.workspaceRoot,
+                sessionId: input.sessionId,
+                updatedAt: input.updatedAt,
+              });
             const providerSnapshot = yield* instance.snapshot.getSnapshot;
             if (
               providerSnapshot.nativeSessions?.canLoad !== true &&
@@ -1509,7 +1555,11 @@ export const layerWsRpc = (
                   }),
               ),
             );
-            if (existing !== null) return { threadId, imported: false } as const;
+            if (existing !== null) {
+              // Threads imported before history was stored get it on the next import.
+              yield* importHistory(threadId);
+              return { threadId, imported: false } as const;
+            }
 
             const provider = (yield* providerRegistry.getProviders).find(
               (candidate) => candidate.instanceId === input.instanceId,
@@ -1565,6 +1615,23 @@ export const layerWsRpc = (
                 cause: launched.failure,
               });
             }
+            yield* importHistory(threadId);
+            // Imported history is finished work, like imported Claude and Codex
+            // transcripts, which arrive settled.
+            yield* threadManagement
+              .dispatch({
+                type: "thread.settle",
+                commandId: CommandId.make(yield* crypto.randomUUIDv4().pipe(Effect.orDie)),
+                threadId,
+              })
+              .pipe(
+                Effect.catchCause((cause) =>
+                  Effect.logWarning("Could not settle the imported ACP thread", {
+                    threadId,
+                    cause,
+                  }),
+                ),
+              );
             return { threadId, imported: true } as const;
           }),
         );
