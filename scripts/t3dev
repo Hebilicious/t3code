@@ -57,8 +57,10 @@ fi
 export T3CODE_TELEMETRY_ENABLED=false
 
 (cd apps/web && vp build)
-# The server serves apps/web/dist and shares itself on the tailnet.
+# The server serves apps/web/dist on http://localhost:5733, the address the dev
+# server had (browsers keep saved environments per address), and shares itself
+# on the tailnet at the same port.
 exec "$NODE" apps/server/src/bin.ts start \
   --mode web --no-browser \
-  --base-dir "$HOME/.t3" --port 13773 \
+  --base-dir "$HOME/.t3" --port 5733 \
   --tailscale-serve --tailscale-serve-port 5733
