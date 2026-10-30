@@ -20,10 +20,18 @@ commit to one change, and put a fix to a change into that change's commit.
 
 ## Run T3
 
-`scripts/t3dev` starts the dev stack from this checkout, shared on the tailnet,
-with its state in `~/.t3/userdata`. Each device links it onto its PATH once:
+`scripts/t3dev` builds the web app from this checkout and runs the server,
+which serves it and shares itself on the tailnet; state is in
+`~/.t3/userdata`. Nothing watches the files, so a change reaches T3 only when
+T3 restarts. `t3dev --dev` runs the Vite dev stack instead (several GiB more
+memory, restarts the server on every file change); only use it to work on T3,
+and never edit the checkout that runs T3: work in a worktree. Each device
+links the script onto its PATH once:
 `ln -sf "$PWD/scripts/t3dev" ~/.local/bin/t3dev`. Start T3 with `t3dev`, or
 through the device's `t3dev` systemd user unit if it has one.
+
+`.env.schema` (gitignored, one per device) holds the dev login token for
+`--dev`, encrypted with varlock. Never print it.
 
 ## Set up a new device
 
