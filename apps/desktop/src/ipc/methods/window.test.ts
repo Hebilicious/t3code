@@ -209,11 +209,13 @@ describe("installRelayTelemetryEnabled", () => {
       listeners.get(IpcChannels.GET_RELAY_TELEMETRY_ENABLED_CHANNEL)?.(event as never);
       return event.returnValue;
     }).pipe(Effect.scoped);
+  const optedIn = { T3CODE_TELEMETRY_ENABLED: "true" };
 
-  it.effect("reads the desktop host opt-out before returning the renderer policy", () =>
+  it.effect("reads the desktop host opt-in before returning the renderer policy", () =>
     Effect.gen(function* () {
+      assert.isFalse(yield* relayTelemetryEnabled({}));
       assert.isFalse(yield* relayTelemetryEnabled({ T3CODE_TELEMETRY_ENABLED: "false" }));
-      assert.isTrue(yield* relayTelemetryEnabled({}));
+      assert.isTrue(yield* relayTelemetryEnabled(optedIn));
     }),
   );
 
@@ -224,12 +226,12 @@ describe("installRelayTelemetryEnabled", () => {
         organization: "Example Corp",
         limits,
       });
-      assert.isFalse(yield* relayTelemetryEnabled({}, policy({ telemetry: false })));
-      assert.isTrue(yield* relayTelemetryEnabled({}, policy({ webhookTasks: false })));
+      assert.isFalse(yield* relayTelemetryEnabled(optedIn, policy({ telemetry: false })));
+      assert.isTrue(yield* relayTelemetryEnabled(optedIn, policy({ webhookTasks: false })));
       // A policy that cannot be read fails closed.
       assert.isFalse(
         yield* relayTelemetryEnabled(
-          {},
+          optedIn,
           new ManagedPolicyFileError({ path: "/test", reason: "bad JSON" }),
         ),
       );
