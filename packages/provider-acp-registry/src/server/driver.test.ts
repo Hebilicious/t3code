@@ -13,6 +13,7 @@ import {
   checkAcpRegistryProviderReadiness,
   checkAcpRegistryProviderStatus,
 } from "./driver.ts";
+import { normalizeAcpRegistryLiveConfiguration } from "./probe.ts";
 
 const decodeSettings = Schema.decodeSync(AcpRegistrySettings);
 const identity = {
@@ -163,17 +164,36 @@ describe("acpRegistrySnapshotReadiness", () => {
     expect(
       applyAcpRegistryLiveConfiguration(
         provider,
-        {
-          models: [{ id: "live-model", name: "Live model", description: null }],
-          currentModelId: "live-model",
-          configOptions: [],
-        },
+        normalizeAcpRegistryLiveConfiguration([
+          {
+            id: "model",
+            name: "Model",
+            category: "model",
+            type: "select",
+            currentValue: "live-model",
+            options: [
+              {
+                groupId: "opencode-go",
+                name: "opencode-go",
+                options: [{ value: "live-model", name: "Live model" }],
+              },
+              {
+                groupId: "opencode-go-2",
+                name: "OpenCode Go 2",
+                options: [{ value: "grouped-model", name: "Grouped model" }],
+              },
+            ],
+          },
+        ]),
         [],
       ),
     ).toMatchObject({
       auth: { status: "unknown", canLogout: true },
       nativeSessions: { canList: true, canLoad: true, canResume: true },
-      models: [{ slug: "live-model", isDefault: true }],
+      models: [
+        { slug: "live-model", isDefault: true, subProvider: "opencode-go" },
+        { slug: "grouped-model", subProvider: "OpenCode Go 2" },
+      ],
     });
   });
 

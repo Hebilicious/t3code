@@ -25,6 +25,7 @@ export const ModelListRow = memo(function ModelListRow(props: {
   isFavorite: boolean;
   isSelected: boolean;
   showProvider: boolean;
+  showInstanceName: boolean;
   showNewBadge?: boolean;
   unavailable?: boolean;
   jumpLabel?: string | null;
@@ -36,7 +37,10 @@ export const ModelListRow = memo(function ModelListRow(props: {
     name: props.name,
     subProvider: props.subProvider,
   };
-  const providerLabel = getProviderRowLabel(props.providerDisplayName, props.subProvider);
+  const providerLabel =
+    props.showInstanceName || !props.subProvider
+      ? getProviderRowLabel(props.providerDisplayName, props.subProvider)
+      : props.subProvider;
 
   const row = (
     <ComboboxItem

@@ -1018,6 +1018,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                         : modelKey === activeModelKey
                     }
                     showProvider={rowsMixProviders || Boolean(model.subProvider)}
+                    showInstanceName={rowsMixProviders}
                     showNewBadge={model.badge === "new"}
                     unavailable={model.isUnavailable === true}
                     jumpLabel={modelJumpLabelByKey.get(modelKey) ?? null}
