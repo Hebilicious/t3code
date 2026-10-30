@@ -1,0 +1,42 @@
+#!/bin/sh
+# Run T3 Code's dev stack (server + web) from this checkout, shared on the
+# tailnet. State lives in ~/.t3/userdata (--home-dir ~/.t3).
+# Link it onto PATH: ln -sf "$PWD/scripts/t3dev" ~/.local/bin/t3dev
+# Extra arguments reach the dev runner, e.g. `t3dev --browser`.
+set -e
+
+# The checkout this script lives in, also when it is reached through a link.
+REPO="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+cd "$REPO"
+
+# An inherited PROTO_<TOOL>_VERSION outranks the checkout's .prototools.
+unset PROTO_NODE_VERSION
+unset PROTO_PNPM_VERSION
+
+# Agent commands run as non-interactive bash, which reads BASH_ENV and no rc
+# file; a ~/.bash_env that activates proto gives them their repo's toolchain.
+if [ -f "$HOME/.bash_env" ]; then
+  export BASH_ENV="$HOME/.bash_env"
+fi
+
+# The dev runner spawns `vp`, which must match the checkout's vite-plus. Expose
+# only that one binary, not all of node_modules/.bin, to the processes below.
+VP_DIR="$REPO/node_modules/.t3dev-bin"
+mkdir -p "$VP_DIR"
+ln -sf ../.bin/vp "$VP_DIR/vp"
+export PATH="$VP_DIR:$PATH"
+
+# The checkout's pinned node, resolved with a clean env (under an AI agent
+# proto prints NDJSON). Without proto, the node on PATH.
+NODE="$(env -i HOME="$HOME" PATH="$PATH" PROTO_HOME="${PROTO_HOME:-$HOME/.proto}" proto bin node 2>/dev/null)" || NODE=node
+# vp starts the server with `node` from PATH, which otherwise is whatever node
+# the caller's directory activated.
+if [ "$NODE" != node ]; then
+  export PATH="$(dirname "$NODE"):$PATH"
+fi
+
+# The web server otherwise adds a project for its own cwd, apps/server, with an
+# empty "New thread" in it on every start.
+export T3CODE_AUTO_BOOTSTRAP_PROJECT_FROM_CWD=0
+
+exec "$NODE" scripts/dev-runner.ts dev --share --home-dir "$HOME/.t3" "$@"
