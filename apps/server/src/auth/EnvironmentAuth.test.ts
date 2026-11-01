@@ -3,6 +3,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { authScopeResponse, AuthStandardClientScopes } from "@t3tools/contracts";
 import { expect, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -297,6 +298,29 @@ it.layer(Layer.mergeAll(NodeServices.layer, NodePlatformCrypto.layer))(
         } as never);
 
         expect(verified.sessionId).toBe(bearer.sessionId);
+      }).pipe(Effect.provide(layerEnvironmentAuth({ mode: "web", host: "192.168.1.50" }))),
+    );
+
+    it.effect("issues an MCP client session with a chosen lifetime and access level", () =>
+      Effect.gen(function* () {
+        const serverAuth = yield* EnvironmentAuth.EnvironmentAuth;
+        const before = yield* DateTime.now;
+        const issued = yield* serverAuth.issueMcpClientSession({
+          label: "Headless agent",
+          access: "auto",
+          peerLink: false,
+          client: { label: "Headless agent", deviceType: "bot" },
+          ttl: Duration.days(3650),
+        });
+        const lifetimeDays =
+          (DateTime.toEpochMillis(issued.expiresAt) - DateTime.toEpochMillis(before)) / 86_400_000;
+        expect(lifetimeDays).toBeGreaterThan(3649);
+
+        const session = yield* serverAuth.authenticateMcpClient({
+          headers: { authorization: `Bearer ${issued.token}` },
+        } as never);
+        expect(session.access).toBe("auto");
+        expect(session.label).toBe("Headless agent");
       }).pipe(Effect.provide(layerEnvironmentAuth({ mode: "web", host: "192.168.1.50" }))),
     );
 

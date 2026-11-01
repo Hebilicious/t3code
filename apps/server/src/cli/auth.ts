@@ -1,5 +1,6 @@
-import { AuthSessionId, AuthStandardClientScopes } from "@t3tools/contracts";
+import { AuthMcpClientAccess, AuthSessionId, AuthStandardClientScopes } from "@t3tools/contracts";
 import * as Console from "effect/Console";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -243,6 +244,55 @@ const sessionRevokeCommand = Command.make("revoke", {
   ),
 );
 
+// An MCP client session issued directly, for a headless agent that sends a fixed bearer token
+// instead of signing in through the approval page (whose sessions last 30 days).
+const mcpAccessFlag = Flag.Literals("access", AuthMcpClientAccess.literals).pipe(
+  Flag.withDescription(
+    "Access level, as on the approval page: read-only, approval-required, auto-accept-edits, auto, full-access.",
+  ),
+);
+
+const mcpIssueCommand = Command.make("issue", {
+  ...authLocationFlags,
+  access: mcpAccessFlag,
+  ttl: ttlFlag,
+  label: labelFlag,
+  tokenOnly: tokenOnlyFlag,
+}).pipe(
+  Command.withDescription(
+    "Issue an MCP client bearer token, as an approved sign-in would, with an optional lifetime.",
+  ),
+  Command.withHandler((flags) =>
+    runWithEnvironmentAuth(
+      flags,
+      (environmentAuth) =>
+        Effect.gen(function* () {
+          const label = Option.getOrElse(flags.label, () => "MCP client");
+          const issued = yield* environmentAuth.issueMcpClientSession({
+            label,
+            access: flags.access,
+            peerLink: false,
+            client: { label, deviceType: "bot" },
+            ...(Option.isSome(flags.ttl) ? { ttl: flags.ttl.value } : {}),
+          });
+          yield* Console.log(
+            flags.tokenOnly
+              ? issued.token
+              : `Issued MCP client session ${issued.sessionId} (${flags.access}), expires ${DateTime.formatIso(issued.expiresAt)}.\nToken: ${issued.token}`,
+          );
+        }),
+      {
+        quietLogs: flags.tokenOnly,
+      },
+    ),
+  ),
+);
+
+const mcpCommand = Command.make("mcp").pipe(
+  Command.withDescription("Manage MCP client sessions."),
+  Command.withSubcommands([mcpIssueCommand]),
+);
+
 const sessionCommand = Command.make("session").pipe(
   Command.withDescription("Manage bearer sessions."),
   Command.withSubcommands([sessionIssueCommand, sessionListCommand, sessionRevokeCommand]),
@@ -250,5 +300,5 @@ const sessionCommand = Command.make("session").pipe(
 
 export const authCommand = Command.make("auth").pipe(
   Command.withDescription("Manage the local auth control plane for headless deployments."),
-  Command.withSubcommands([pairingCommand, sessionCommand]),
+  Command.withSubcommands([pairingCommand, sessionCommand, mcpCommand]),
 );
