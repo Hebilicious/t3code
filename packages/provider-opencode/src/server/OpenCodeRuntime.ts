@@ -34,7 +34,11 @@ import { isWindowsCommandNotFound } from "@t3tools/provider-core/server/snapshot
 import * as OpenCodeServerLedger from "./OpenCodeServerLedger.ts";
 import { collectStreamAsString } from "@t3tools/provider-core/server/snapshotProbe";
 import * as NetService from "@t3tools/shared/Net";
-import { AgentScope } from "@t3tools/shared/AgentScope";
+import {
+  AgentScope,
+  type AgentResourceIdentity,
+  withAgentResourceAttributes,
+} from "@t3tools/shared/AgentScope";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { compareSemverVersions, parseSemver } from "@t3tools/shared/semver";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
@@ -314,6 +318,7 @@ export class OpenCodeRuntime extends Context.Service<
       readonly directory: string;
       readonly serverPassword?: string;
       readonly environment?: NodeJS.ProcessEnv;
+      readonly resourceIdentity?: AgentResourceIdentity | undefined;
       readonly port?: number;
       readonly hostname?: string;
       readonly timeoutMs?: number;
@@ -325,6 +330,7 @@ export class OpenCodeRuntime extends Context.Service<
       readonly serverUrl?: string | null;
       readonly serverPassword?: string;
       readonly environment?: NodeJS.ProcessEnv;
+      readonly resourceIdentity?: AgentResourceIdentity | undefined;
       readonly port?: number;
       readonly hostname?: string;
       readonly timeoutMs?: number;
@@ -603,7 +609,11 @@ const makeOpenCodeRuntime = Effect.gen(function* () {
           detached: hostPlatform !== "win32",
           shell: spawnCommand.shell,
           env: {
-            ...input.environment,
+            ...withAgentResourceAttributes(
+              input.environment ?? {},
+              input.resourceIdentity,
+              (input.environment ?? process.env).OTEL_RESOURCE_ATTRIBUTES,
+            ),
             ...(serverPassword !== undefined ? { OPENCODE_SERVER_PASSWORD: serverPassword } : {}),
             // The value is set explicitly (rather than relying on inheritance) because
             // `extendEnv` is false whenever `input.environment` is provided.
@@ -817,6 +827,7 @@ const makeOpenCodeRuntime = Effect.gen(function* () {
       directory: input.directory,
       ...(input.serverPassword !== undefined ? { serverPassword: input.serverPassword } : {}),
       ...(input.environment !== undefined ? { environment: input.environment } : {}),
+      ...(input.resourceIdentity !== undefined ? { resourceIdentity: input.resourceIdentity } : {}),
       ...(input.port !== undefined ? { port: input.port } : {}),
       ...(input.hostname !== undefined ? { hostname: input.hostname } : {}),
       ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),

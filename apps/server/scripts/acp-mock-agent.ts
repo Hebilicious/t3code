@@ -1874,6 +1874,7 @@ const program = Effect.gen(function* () {
       return Effect.succeed({
         inherited: process.env.T3_ACP_RUNTIME_AMBIENT === "sentinel",
         explicit: process.env.T3_ACP_RUNTIME_EXPLICIT === "kept",
+        resourceAttributes: process.env.OTEL_RESOURCE_ATTRIBUTES ?? null,
       });
     }
     if (method === "_test/finish-cancel") {

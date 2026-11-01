@@ -1,4 +1,4 @@
-import { AgentScope } from "@t3tools/shared/AgentScope";
+import { AgentScope, type AgentResourceIdentity } from "@t3tools/shared/AgentScope";
 import * as KeyedLock from "@t3tools/shared/KeyedLock";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import {
@@ -49,6 +49,7 @@ import {
 } from "../observability/Metrics.ts";
 import { ProviderWorkspaceMissingError } from "../provider/Errors.ts";
 import * as ProviderInstallationGate from "../provider/ProviderInstallationGate.ts";
+import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as ProjectService from "../project/ProjectService.ts";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import * as ServerSettings from "../serverSettings.ts";
@@ -420,6 +421,19 @@ export const layerWithOptions = (
             Effect.map((settings) => settings.promptSuggestionsEnabled),
             Effect.orElseSucceed(() => false),
           );
+      const serverEnvironment = yield* Effect.serviceOption(ServerEnvironment.ServerEnvironment);
+      const resourceIdentity = Effect.fn("ProviderSessionManagerV2.resourceIdentity")(function* (
+        threadId: ThreadId,
+      ) {
+        const projectId = yield* projectionStore.getThread(threadId).pipe(
+          Effect.map((thread) => thread.projectId),
+          Effect.orElseSucceed(() => undefined),
+        );
+        const environmentId = Option.isSome(serverEnvironment)
+          ? yield* serverEnvironment.value.getEnvironmentId
+          : undefined;
+        return { threadId, projectId, environmentId } satisfies AgentResourceIdentity;
+      });
       const agentAccessSettings = Effect.fn("ProviderSessionManagerV2.agentAccessSettings")(
         function* (threadId: ThreadId) {
           if (Option.isNone(serverSettings)) return { browser: true, device: false };
@@ -2784,6 +2798,7 @@ export const layerWithOptions = (
                   input.modelSelection.instanceId,
                   adapter.openSession({
                     threadId: input.threadId,
+                    resourceIdentity: yield* resourceIdentity(input.threadId),
                     providerSessionId: input.providerSessionId,
                     modelSelection: input.modelSelection,
                     runtimePolicy: input.runtimePolicy,

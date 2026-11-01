@@ -81,7 +81,11 @@ import {
   MCP_APP_OUTPUT_KEY,
   mcpAppToolResourceUri,
 } from "@t3tools/shared/mcpApp";
-import { AgentScope } from "@t3tools/shared/AgentScope";
+import {
+  AgentScope,
+  type AgentResourceIdentity,
+  withAgentResourceAttributes,
+} from "@t3tools/shared/AgentScope";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { applyClaudePromptEffortPrefix } from "@t3tools/shared/model";
 import { compareSemverVersions } from "@t3tools/shared/semver";
@@ -611,6 +615,7 @@ export interface ClaudeAgentSdkQueryOpenInput {
   readonly options: ClaudeAgentSdkQueryOptions;
   readonly threadId: ThreadId;
   readonly providerSessionId: OrchestrationV2ProviderSession["id"];
+  readonly resourceIdentity?: AgentResourceIdentity | undefined;
 }
 
 export interface ClaudeAgentSdkQuerySession {
@@ -1321,7 +1326,10 @@ export const layerQueryRunner: Layer.Layer<
           const queryOptions = {
             ...sdkOptions,
             env: {
-              ...(sdkOptions.env ?? hostEnvironment),
+              ...withAgentResourceAttributes(
+                sdkOptions.env ?? hostEnvironment,
+                input.resourceIdentity,
+              ),
               [PortScanner.AGENT_THREAD_ENV]: input.threadId,
             },
           };
@@ -5464,6 +5472,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
       function* (input: ProviderAdapter.ProviderAdapterV2OpenSessionInput) {
         const promptSuggestionsEnabled = input.promptSuggestions ?? Effect.succeed(false);
         const sessionScope = yield* Effect.scope;
+        const { resourceIdentity } = input;
         const now = yield* DateTime.now;
         const session = providerSession({
           providerSessionId: input.providerSessionId,
@@ -12091,6 +12100,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             threadId: turnInput.threadId,
             providerSessionId: input.providerSessionId,
             options: queryOptions,
+            resourceIdentity,
           });
           // The SDK spawns the CLI per turn, so only the open waits for a provider update.
           const querySession = yield* (

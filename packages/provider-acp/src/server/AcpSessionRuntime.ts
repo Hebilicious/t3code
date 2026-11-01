@@ -29,7 +29,13 @@ import * as EffectAcpErrors from "effect-acp/errors";
 import type * as EffectAcpSchema from "effect-acp/compat";
 import type * as EffectAcpProtocol from "effect-acp/protocol";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
-import { AgentScope, AgentScopeThreadId, RAISE_OOM_SCORE_LINE } from "@t3tools/shared/AgentScope";
+import {
+  AgentScope,
+  AgentScopeResourceIdentity,
+  AgentScopeThreadId,
+  RAISE_OOM_SCORE_LINE,
+  withAgentResourceAttributes,
+} from "@t3tools/shared/AgentScope";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import { signalProcessGroup } from "@t3tools/provider-core/server/processGroup";
@@ -1444,11 +1450,22 @@ export const make = Effect.fn("AcpSessionRuntime.make")(function* (
           ...wrapCommandForLinuxCgroup(linuxCgroupLease, containedTargetCommand, spawnCommand.args),
           shell: false,
         };
+  const extendEnv = options.spawn.extendEnv ?? true;
+  const resourceIdentity = yield* AgentScopeResourceIdentity;
+  const agentEnvironment =
+    resourceIdentity === undefined
+      ? options.spawn.env
+      : withAgentResourceAttributes(
+          options.spawn.env ?? {},
+          resourceIdentity,
+          (extendEnv ? { ...process.env, ...options.spawn.env } : options.spawn.env)
+            ?.OTEL_RESOURCE_ATTRIBUTES,
+        );
   const spawnEnvironment =
     linuxCgroupLease === undefined
-      ? options.spawn.env
+      ? agentEnvironment
       : {
-          ...options.spawn.env,
+          ...agentEnvironment,
           ELECTRON_RUN_AS_NODE: "1",
           T3_ACP_CGROUP_WRAPPER: "1",
         };
@@ -1457,7 +1474,7 @@ export const make = Effect.fn("AcpSessionRuntime.make")(function* (
       ChildProcess.make(containedSpawnCommand.command, containedSpawnCommand.args, {
         ...(options.spawn.cwd ? { cwd: options.spawn.cwd } : {}),
         ...(spawnEnvironment ? { env: spawnEnvironment } : {}),
-        extendEnv: options.spawn.extendEnv ?? true,
+        extendEnv,
         ...(options.ownDetachedProcessGroup === undefined
           ? {}
           : { detached: options.ownDetachedProcessGroup }),

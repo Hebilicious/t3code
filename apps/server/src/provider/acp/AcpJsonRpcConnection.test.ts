@@ -20,7 +20,7 @@ import { ChildProcessSpawner } from "effect/process";
 import { describe, expect } from "vite-plus/test";
 
 import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
-import { AgentScope } from "@t3tools/shared/AgentScope";
+import { AgentScope, AgentScopeResourceIdentity } from "@t3tools/shared/AgentScope";
 import * as EffectAcpErrors from "effect-acp/errors";
 
 const __dirname = NodePath.dirname(NodeURL.fileURLToPath(import.meta.url));
@@ -448,6 +448,33 @@ describe("AcpSessionRuntime", () => {
       expect(yield* runtime.request("_test/environment", {})).toEqual({
         inherited: false,
         explicit: true,
+        resourceAttributes: null,
+      });
+    }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+  );
+
+  it.effect("appends its thread to the resource attributes the agent inherits", () =>
+    Effect.gen(function* () {
+      yield* Effect.acquireRelease(
+        Effect.sync(() => setProcessEnv("OTEL_RESOURCE_ATTRIBUTES", "service.namespace=house")),
+        (restore) => Effect.sync(restore),
+      );
+      const runtime = yield* AcpSessionRuntime.make({
+        ...mockRuntimeOptions,
+        spawn: { ...mockRuntimeOptions.spawn, env: { T3_ACP_RUNTIME_EXPLICIT: "kept" } },
+      }).pipe(
+        Effect.provideService(AgentScopeResourceIdentity, {
+          threadId: "thread-acp",
+          projectId: "project-acp",
+          environmentId: "environment-acp",
+        }),
+      );
+      yield* runtime.initialize();
+      expect(yield* runtime.request("_test/environment", {})).toEqual({
+        inherited: false,
+        explicit: true,
+        resourceAttributes:
+          "service.namespace=house,t3.thread_id=thread-acp,t3.project_id=project-acp,t3.environment_id=environment-acp",
       });
     }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
   );

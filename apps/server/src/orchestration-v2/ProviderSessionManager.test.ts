@@ -438,10 +438,9 @@ const makeProviderAdapter = Effect.fnUntraced(function* (
     readonly mcpConfigs?: Ref.Ref<
       ReadonlyArray<McpProviderSession.McpProviderSessionConfig | undefined>
     >;
-    readonly beforeOpen?: (input: {
-      readonly providerSessionId: ProviderSessionId;
-      readonly initialProviderItemIdentityVersion?: 2;
-    }) => Effect.Effect<void>;
+    readonly beforeOpen?: (
+      input: ProviderAdapter.ProviderAdapterV2OpenSessionInput,
+    ) => Effect.Effect<void>;
     readonly hasPendingBackgroundWork?: Effect.Effect<boolean>;
     readonly hasPendingBackgroundWorkForThread?: Effect.Effect<boolean>;
     readonly backgroundTasksEndWithProcess?: boolean;
@@ -611,10 +610,9 @@ function layerTest(input: {
   readonly mcpConfigs?: Ref.Ref<
     ReadonlyArray<McpProviderSession.McpProviderSessionConfig | undefined>
   >;
-  readonly beforeOpen?: (input: {
-    readonly providerSessionId: ProviderSessionId;
-    readonly initialProviderItemIdentityVersion?: 2;
-  }) => Effect.Effect<void>;
+  readonly beforeOpen?: (
+    input: ProviderAdapter.ProviderAdapterV2OpenSessionInput,
+  ) => Effect.Effect<void>;
   readonly failReleaseEventWrites?: boolean;
   readonly flakyReleaseWrites?: FlakyReleaseWrites;
   readonly pauseAttachWrite?: Parameters<typeof layerPausingAttachEventSink>[0];
@@ -725,6 +723,7 @@ function layerTest(input: {
           layerConfiguredMcpRegistry,
           layerTestStores,
           input.installationGateLayer ?? ProviderInstallationGate.layer,
+          Layer.succeed(ServerEnvironment.ServerEnvironment, fakeEnvironment),
           ...(input.serverSettingsLayer === undefined ? [] : [input.serverSettingsLayer]),
           ...(input.projectServiceLayer === undefined ? [] : [input.projectServiceLayer]),
         ),
@@ -1068,6 +1067,44 @@ it.effect("ProviderSessionManagerV2 opens independent sessions concurrently", ()
         }),
       ),
     );
+  }),
+);
+
+it.effect("ProviderSessionManagerV2 opens a session with its thread's resource identity", () =>
+  Effect.gen(function* () {
+    const state = yield* Ref.make(emptyState);
+    const opened = yield* Deferred.make<ProviderAdapter.ProviderAdapterV2OpenSessionInput>();
+    const projectId = ProjectId.make("project-provider-session-manager-resource-identity");
+    const threadId = ThreadId.make("thread-provider-session-manager-resource-identity");
+
+    yield* Effect.gen(function* () {
+      const eventSink = yield* EventSink.EventSinkV2;
+      const idAllocator = yield* IdAllocator.IdAllocatorV2;
+      const manager = yield* ProviderSessionManager.ProviderSessionManagerV2;
+      const now = yield* DateTime.now;
+      const providerSessionId = yield* idAllocator.allocate.providerSession({
+        providerInstanceId: modelSelection.instanceId,
+        threadId,
+      });
+      yield* eventSink.write({
+        events: [yield* makeThreadCreatedEvent({ idAllocator, threadId, now, projectId })],
+      });
+      yield* manager.open({ threadId, providerSessionId, modelSelection, runtimePolicy });
+    }).pipe(
+      Effect.provide(
+        layerTest({
+          state,
+          idleTimeoutMs: 60_000,
+          beforeOpen: (input) => Deferred.succeed(opened, input).pipe(Effect.asVoid),
+        }),
+      ),
+    );
+
+    assert.deepStrictEqual((yield* Deferred.await(opened)).resourceIdentity, {
+      threadId,
+      projectId,
+      environmentId: "environment-provider-session-manager",
+    });
   }),
 );
 

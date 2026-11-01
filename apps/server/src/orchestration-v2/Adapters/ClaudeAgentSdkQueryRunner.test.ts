@@ -568,18 +568,25 @@ function fakeClaudeCli(script: string): string {
   return cli;
 }
 
-const openFakeCli = (cli: string) =>
+const openFakeCli = (
+  cli: string,
+  extra: Pick<ClaudeAgentSdkQueryOpenInput, "resourceIdentity"> & {
+    readonly env?: NodeJS.ProcessEnv;
+  } = {},
+) =>
   Effect.gen(function* () {
     const runner = yield* ClaudeAgentSdkQueryRunner;
     return yield* runner.open({
       threadId: ThreadId.make("thread-fake-cli"),
       providerSessionId: ProviderSessionId.make("session-fake-cli"),
+      resourceIdentity: extra.resourceIdentity,
       options: {
         sessionId: "native-session-fake-cli",
         model: "claude-sonnet-4-6",
         tools: [],
         permissionMode: "default",
         pathToClaudeCodeExecutable: cli,
+        ...(extra.env === undefined ? {} : { env: extra.env }),
       },
     });
   });
@@ -764,53 +771,66 @@ describe.skipIf(HostProcess.Platform.defaultValue() === "win32")("Claude CLI pro
     }),
   );
 
-  it.effect("marks the CLI's jobs with its thread and counts it as an agent until it exits", () => {
-    let runningAgents = 0;
-    let releaseAgent!: () => void;
-    const agentReleased = new Promise<void>((resolve) => (releaseAgent = resolve));
-    const runner = layerQueryRunner.pipe(
-      Layer.provide(
-        Layer.mock(PortScanner.PortDiscovery)({
-          trackAgent: () => {
-            runningAgents += 1;
-            return () => {
-              runningAgents -= 1;
-              releaseAgent();
-            };
-          },
-        }),
-      ),
-      Layer.provide(
-        Layer.succeed(ProviderEventLoggers, { native: undefined, canonical: undefined }),
-      ),
-      Layer.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
-    );
-    return Effect.gen(function* () {
-      const cli = fakeClaudeCli(
-        [
-          'dir=$(dirname "$0")',
-          `printf '%s' "$${PortScanner.AGENT_THREAD_ENV}" > "$dir/thread"`,
-          "cat > /dev/null",
-        ].join("\n"),
+  it.effect(
+    "marks the CLI's jobs and telemetry with its thread and counts it as an agent until it exits",
+    () => {
+      let runningAgents = 0;
+      let releaseAgent!: () => void;
+      const agentReleased = new Promise<void>((resolve) => (releaseAgent = resolve));
+      const runner = layerQueryRunner.pipe(
+        Layer.provide(
+          Layer.mock(PortScanner.PortDiscovery)({
+            trackAgent: () => {
+              runningAgents += 1;
+              return () => {
+                runningAgents -= 1;
+                releaseAgent();
+              };
+            },
+          }),
+        ),
+        Layer.provide(
+          Layer.succeed(ProviderEventLoggers, { native: undefined, canonical: undefined }),
+        ),
+        Layer.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer)),
       );
-      const dir = NodePath.dirname(cli);
-      NodeChildProcess.execFileSync("mkfifo", [NodePath.join(dir, "thread")]);
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => NodeFS.rmSync(dir, { recursive: true, force: true })),
-      );
-      const threadRead = new Promise<string>((resolve) => {
-        let thread = "";
-        NodeFS.createReadStream(NodePath.join(dir, "thread"), "utf8")
-          .on("data", (chunk) => (thread += chunk))
-          .once("end", () => resolve(thread));
-      });
+      return Effect.gen(function* () {
+        const cli = fakeClaudeCli(
+          [
+            'dir=$(dirname "$0")',
+            `printf '%s %s' "$${PortScanner.AGENT_THREAD_ENV}" "$OTEL_RESOURCE_ATTRIBUTES" > "$dir/thread"`,
+            "cat > /dev/null",
+          ].join("\n"),
+        );
+        const dir = NodePath.dirname(cli);
+        NodeChildProcess.execFileSync("mkfifo", [NodePath.join(dir, "thread")]);
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => NodeFS.rmSync(dir, { recursive: true, force: true })),
+        );
+        const threadRead = new Promise<string>((resolve) => {
+          let thread = "";
+          NodeFS.createReadStream(NodePath.join(dir, "thread"), "utf8")
+            .on("data", (chunk) => (thread += chunk))
+            .once("end", () => resolve(thread));
+        });
 
-      const session = yield* openFakeCli(cli);
-      assert.equal(yield* Effect.promise(() => threadRead), "thread-fake-cli");
-      assert.equal(runningAgents, 1);
-      yield* session.close;
-      yield* Effect.promise(() => agentReleased);
-      assert.equal(runningAgents, 0);
-    }).pipe(Effect.provide(runner));
-  });
+        const session = yield* openFakeCli(cli, {
+          env: { ...process.env, OTEL_RESOURCE_ATTRIBUTES: "service.namespace=house" },
+          resourceIdentity: {
+            threadId: "thread-fake-cli",
+            projectId: "project-fake-cli",
+            environmentId: "environment-fake-cli",
+          },
+        });
+        assert.equal(
+          yield* Effect.promise(() => threadRead),
+          "thread-fake-cli service.namespace=house,t3.thread_id=thread-fake-cli,t3.project_id=project-fake-cli,t3.environment_id=environment-fake-cli",
+        );
+        assert.equal(runningAgents, 1);
+        yield* session.close;
+        yield* Effect.promise(() => agentReleased);
+        assert.equal(runningAgents, 0);
+      }).pipe(Effect.provide(runner));
+    },
+  );
 });

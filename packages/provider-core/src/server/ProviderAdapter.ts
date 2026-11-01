@@ -34,6 +34,7 @@ import {
   ThreadId,
   TurnItemId,
 } from "@t3tools/contracts";
+import type { AgentResourceIdentity } from "@t3tools/shared/AgentScope";
 import * as Context from "effect/Context";
 import * as Schema from "effect/Schema";
 import type * as Effect from "effect/Effect";
@@ -511,6 +512,8 @@ export interface ProviderAdapterV2OpenSessionInput {
   readonly resumeFromSession?: OrchestrationV2ProviderSession;
   readonly initialNativeThreadId?: string;
   readonly initialProviderItemIdentityVersion?: 2;
+  /** Agent processes started for this thread carry it in `OTEL_RESOURCE_ATTRIBUTES`. */
+  readonly resourceIdentity?: AgentResourceIdentity;
 }
 
 export interface ProviderAdapterV2EnsureThreadInput {
