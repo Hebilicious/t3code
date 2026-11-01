@@ -58,6 +58,12 @@ export const AgentScopeThreadId = Context.Reference<string | undefined>(
   { defaultValue: () => undefined },
 );
 
+/** Set where an adapter starts a runtime that spawns its agent later, as `AgentScopeThreadId` is. */
+export const AgentScopeResourceIdentity = Context.Reference<AgentResourceIdentity | undefined>(
+  "@t3tools/shared/AgentScope/ResourceIdentity",
+  { defaultValue: () => undefined },
+);
+
 export const AGENT_OOM_SCORE_ADJ = 800;
 
 export const RAISE_OOM_SCORE_LINE = `{ echo ${AGENT_OOM_SCORE_ADJ} >/proc/self/oom_score_adj; } 2>/dev/null`;
@@ -118,4 +124,51 @@ export function agentScopeCommand(input: {
       ...args,
     ],
   };
+}
+
+/** The T3 thread an agent process works for, as it appears in the agent's own telemetry. */
+export interface AgentResourceIdentity {
+  readonly threadId?: string | undefined;
+  readonly projectId?: string | undefined;
+  readonly environmentId?: string | undefined;
+}
+
+const OTEL_RESOURCE_ATTRIBUTES = "OTEL_RESOURCE_ATTRIBUTES";
+
+const AGENT_RESOURCE_KEYS = {
+  threadId: "t3.thread_id",
+  projectId: "t3.project_id",
+  environmentId: "t3.environment_id",
+} as const satisfies Record<keyof AgentResourceIdentity, string>;
+
+const resourceAttributeKey = (entry: string) => {
+  const key = entry.split("=", 1)[0]!.trim();
+  try {
+    return decodeURIComponent(key);
+  } catch {
+    return key;
+  }
+};
+
+/**
+ * Appends the identity to the child's `OTEL_RESOURCE_ATTRIBUTES`, percent-encoded as the
+ * specification requires. Inherited attributes stay, except the identity's own keys, which a
+ * server launched from another thread's agent would otherwise pass on. `inherited` is the value
+ * the child gets when `env` only overlays the server's environment.
+ */
+export function withAgentResourceAttributes(
+  env: NodeJS.ProcessEnv,
+  identity: AgentResourceIdentity | undefined,
+  inherited: string | undefined = env[OTEL_RESOURCE_ATTRIBUTES],
+): NodeJS.ProcessEnv {
+  const attributes = Object.entries(AGENT_RESOURCE_KEYS).flatMap(([field, key]) => {
+    const value = identity?.[field as keyof AgentResourceIdentity];
+    return value ? [`${key}=${encodeURIComponent(value)}`] : [];
+  });
+  if (attributes.length === 0) return env;
+  const replaced = new Set<string>(Object.values(AGENT_RESOURCE_KEYS));
+  const kept = (inherited ?? "")
+    .split(",")
+    .filter((entry) => entry.trim() !== "" && !replaced.has(resourceAttributeKey(entry)));
+  return { ...env, [OTEL_RESOURCE_ATTRIBUTES]: [...kept, ...attributes].join(",") };
 }

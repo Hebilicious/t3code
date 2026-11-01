@@ -81,7 +81,11 @@ import {
   MCP_APP_OUTPUT_KEY,
   mcpAppToolResourceUri,
 } from "@t3tools/shared/mcpApp";
-import { AgentScope } from "@t3tools/shared/AgentScope";
+import {
+  AgentScope,
+  type AgentResourceIdentity,
+  withAgentResourceAttributes,
+} from "@t3tools/shared/AgentScope";
 import * as ProviderProcesses from "../../process/providerProcesses.ts";
 import * as SpawnWorker from "../../process/SpawnWorker.ts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
@@ -720,6 +724,7 @@ export interface ClaudeAgentSdkQueryOpenInput {
   readonly options: ClaudeAgentSdkQueryOptions;
   readonly threadId: ThreadId;
   readonly providerSessionId: OrchestrationV2ProviderSession["id"];
+  readonly resourceIdentity?: AgentResourceIdentity | undefined;
 }
 
 export interface ClaudeAgentSdkQuerySession {
@@ -1565,7 +1570,7 @@ export const layerQueryRunner: Layer.Layer<
         ...sdkOptions,
         ...(resumeSessionAt === undefined ? {} : { resumeSessionAt }),
         env: {
-          ...(sdkOptions.env ?? hostEnvironment),
+          ...withAgentResourceAttributes(sdkOptions.env ?? hostEnvironment, input.resourceIdentity),
           ...(input.resume
             ? {
                 CLAUDE_CODE_RESUME_INTERRUPTED_TURN: "1",
@@ -5945,6 +5950,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
       function* (input: ProviderAdapter.ProviderAdapterV2OpenSessionInput) {
         const promptSuggestionsEnabled = input.promptSuggestions ?? Effect.succeed(false);
         const sessionScope = yield* Effect.scope;
+        const { resourceIdentity } = input;
         const now = yield* DateTime.now;
         const session = providerSession({
           providerSessionId: input.providerSessionId,
@@ -13144,6 +13150,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             providerSessionId: input.providerSessionId,
             options: queryOptions,
             ...(turnInput.resume ? { resume: true } : {}),
+            resourceIdentity,
           });
           // The SDK spawns the CLI per turn, so only the open waits for a provider update.
           const querySession = yield* (

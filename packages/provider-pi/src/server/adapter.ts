@@ -1,6 +1,6 @@
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as NodeUtil from "node:util";
-import { AgentScope } from "@t3tools/shared/AgentScope";
+import { AgentScope, withAgentResourceAttributes } from "@t3tools/shared/AgentScope";
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
 import { readToolOutputImage } from "@t3tools/shared/toolOutput";
 import { isWorkspaceImagePreviewPath } from "@t3tools/shared/filePreview";
@@ -539,7 +539,10 @@ export const makePiAdapterV2 = Effect.fn("makePiAdapterV2")(function* (
           const launch = buildPiRpcLaunch({
             launchArgs: resolvedLaunchArgs.args,
             // PortScanner.AGENT_THREAD_ENV, as a literal because this package cannot reach apps/server.
-            environment: { ...options.environment, T3CODE_THREAD_ID: input.threadId },
+            environment: {
+              ...withAgentResourceAttributes(options.environment, input.resourceIdentity),
+              T3CODE_THREAD_ID: input.threadId,
+            },
             mcpSession,
             extensionPath,
             sessionPath,

@@ -46,7 +46,11 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 import { SKILL_MENTION_PATTERN } from "@t3tools/shared/composerInlineTokens";
-import { AgentScope } from "@t3tools/shared/AgentScope";
+import {
+  AgentScope,
+  type AgentResourceIdentity,
+  withAgentResourceAttributes,
+} from "@t3tools/shared/AgentScope";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import {
   COMPUTER_USE_TOOL_SOURCE,
@@ -1485,6 +1489,7 @@ export interface CodexAppServerClientFactoryShape {
     readonly runtimePolicy: ProviderAdapter.ProviderAdapterV2RuntimePolicy;
     readonly settings: CodexSettings;
     readonly environment: NodeJS.ProcessEnv;
+    readonly resourceIdentity?: AgentResourceIdentity | undefined;
   }) => Effect.Effect<
     CodexClient.CodexAppServerClient["Service"],
     ProviderAdapter.ProviderAdapterOpenSessionError,
@@ -1805,10 +1810,13 @@ export const layerAppServerClientFactory: Layer.Layer<
     return CodexAppServerClientFactory.of({
       open: Effect.fn("CodexAdapterV2.open")(function* (input) {
         const scope = yield* Scope.Scope;
-        const environment = {
-          ...codexAppServerEnvironment(input.environment),
-          ...(input.settings.homePath ? { CODEX_HOME: input.settings.homePath } : {}),
-        };
+        const environment = withAgentResourceAttributes(
+          {
+            ...codexAppServerEnvironment(input.environment),
+            ...(input.settings.homePath ? { CODEX_HOME: input.settings.homePath } : {}),
+          },
+          input.resourceIdentity,
+        );
         const command = yield* makeCodexAppServerSpawnCommand({
           command: input.settings.binaryPath || "codex",
           args: codexAppServerArgs(
@@ -1983,6 +1991,8 @@ export const makeCodexAdapterV2 = Effect.fn("makeCodexAdapterV2")(function* (
           runtimePolicy: input.runtimePolicy,
           settings: resolvedRuntime?.config ?? adapterOptions.settings,
           environment: resolvedRuntime?.environment ?? adapterOptions.environment,
+          // One app-server serves every thread of the instance, so only the environment is its own.
+          resourceIdentity: { environmentId: input.resourceIdentity?.environmentId },
         });
         const codexZone = codexTimeZone(resolvedRuntime?.environment ?? adapterOptions.environment);
         const additionalContextByThread = yield* Ref.make(

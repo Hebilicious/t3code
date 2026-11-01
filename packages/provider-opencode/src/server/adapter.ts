@@ -1058,6 +1058,7 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
             ? { serverPassword: settingsSecretLiteral(options.settings.serverPassword) }
             : {}),
           environment: options.environment,
+          resourceIdentity: input.resourceIdentity,
         });
         const broken = brokenVersionDetail({
           name: "OpenCode",
