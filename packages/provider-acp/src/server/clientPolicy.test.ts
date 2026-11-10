@@ -107,6 +107,26 @@ describe("acpPermissionDisposition", () => {
     );
   });
 
+  it("asks for a request the agent marks for a person, whatever the runtime mode", () => {
+    const fullAccess: AcpRuntimePolicy = {
+      runtimeMode: "full-access",
+      cwd,
+      approvalPolicy: "never",
+      sandboxPolicy: { type: "dangerFullAccess" },
+    };
+    for (const kind of ["execute", "read"] as const) {
+      const request = { ...permissionRequest(kind), _meta: { requiresUser: true } };
+      assert.equal(acpPermissionDisposition(fullAccess, request), "ask");
+    }
+    assert.equal(
+      acpPermissionDisposition(fullAccess, {
+        ...permissionRequest("execute"),
+        _meta: { requiresUser: "yes" },
+      }),
+      "allow",
+    );
+  });
+
   it("auto-allows read-kind permission requests under on-request approval", () => {
     for (const runtimePolicy of [
       { ...policy, approvalPolicy: "on-request" },

@@ -511,6 +511,22 @@ describe("AcpRuntimeModel", () => {
     expect(parsePermissionRequest(request)).toMatchObject({ kind: "read", detail: "git status" });
   });
 
+  it("reads the agent's reason for a permission request from _meta", () => {
+    const request = {
+      sessionId: "session-1",
+      options: [{ optionId: "allow-once", name: "Allow once", kind: "allow_once" as const }],
+      toolCall: { toolCallId: "tool-1", kind: "execute" as const, title: "rm -rf build" },
+      _meta: { requiresUser: true, reason: 'Auto review denied tool "bash": deletes user data' },
+    };
+
+    expect(parsePermissionRequest(request)).toMatchObject({
+      reason: 'Auto review denied tool "bash": deletes user data',
+    });
+    expect(parsePermissionRequest({ ...request, _meta: { reason: "" } })).not.toHaveProperty(
+      "reason",
+    );
+  });
+
   it("keeps explicitly cleared permission request fields over the tracked tool call", () => {
     const request = withTrackedPermissionToolCall(
       {

@@ -189,10 +189,20 @@ function isAcpMutationKind(toolKind: string): boolean {
   return toolKind === "edit" || toolKind === "delete" || toolKind === "move";
 }
 
+/**
+ * An agent marks a request `_meta.requiresUser: true` when a person has to decide
+ * it (for example, DeepSeek Harness's Auto review denied the call), so no runtime
+ * mode answers it on its own.
+ */
+function acpPermissionRequiresUser(request: EffectAcpSchema.RequestPermissionRequest): boolean {
+  return unknownRecord(request._meta)?.requiresUser === true;
+}
+
 export function acpPermissionDisposition(
   runtimePolicy: AcpRuntimePolicy,
   request: EffectAcpSchema.RequestPermissionRequest,
 ): AcpPermissionDisposition {
+  if (acpPermissionRequiresUser(request)) return "ask";
   return acpOperationDisposition(runtimePolicy, {
     kind: request.toolCall.kind,
     locations: request.toolCall.locations,

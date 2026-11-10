@@ -231,6 +231,8 @@ export type AcpPlanUpdate =
 export interface AcpPermissionRequest {
   readonly kind: string | "unknown";
   readonly detail?: string;
+  /** Why the agent asks, from the request's `_meta.reason`. */
+  readonly reason?: string;
   readonly toolCall?: AcpToolCallState;
 }
 
@@ -1256,9 +1258,11 @@ export function parsePermissionRequest(
     toolCall?.title ??
     toolCall?.detail ??
     (typeof params.sessionId === "string" ? `Session ${params.sessionId}` : undefined);
+  const reason = isRecord(params._meta) ? params._meta.reason : undefined;
   return {
     kind,
     ...(detail ? { detail } : {}),
+    ...(typeof reason === "string" && reason.length > 0 ? { reason } : {}),
     ...(toolCall ? { toolCall } : {}),
   };
 }
