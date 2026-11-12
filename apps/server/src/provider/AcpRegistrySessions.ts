@@ -220,6 +220,19 @@ const make = Effect.gen(function* () {
         }),
       ),
     );
+    // Imported history is finished work, like imported Claude and Codex
+    // transcripts, which arrive settled.
+    yield* threadManagement
+      .dispatch({
+        type: "thread.settle",
+        commandId: CommandId.make(yield* random.uuidV4()),
+        threadId,
+      })
+      .pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("Could not settle the imported ACP thread", { threadId, cause }),
+        ),
+      );
     return { threadId, imported: true } as const;
   }, coordinator.withSessionMutation);
 
