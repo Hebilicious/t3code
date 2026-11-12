@@ -6,4 +6,6 @@ export interface SecretTextInputProps {
   /** Receives the field's current text, so a submit never uses a stale render of it. */
   readonly onSubmitEditing: (value: string) => void;
   readonly editable: boolean;
+  /** Shows the typed value instead of masking it. */
+  readonly revealed: boolean;
 }

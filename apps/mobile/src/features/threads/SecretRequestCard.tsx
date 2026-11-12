@@ -32,6 +32,7 @@ import { useAtomCommand } from "../../state/use-atom-command";
 import { tryOpenExternalUrl } from "../../lib/openExternalUrl";
 import { Button } from "../../components/ui/Button";
 import { Chip } from "../../components/ui/Chip";
+import { IconButton } from "../../components/ui/IconButton";
 
 const LOCK_SYMBOL: AppSymbolName = { ios: "lock", android: "lock" };
 const PRIVATE_SYMBOL: AppSymbolName = { ios: "checkmark.shield", android: "lock" };
@@ -86,6 +87,7 @@ function PendingSecretRequestForm(props: {
   const [sourceId, setSourceId] = useState<SecretProviderId | null>(null);
   const source = sources.find((candidate) => candidate.id === sourceId) ?? null;
   const [secret, setSecret] = useState("");
+  const [revealed, setRevealed] = useState(false);
   const [reference, setReference] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -177,14 +179,26 @@ function PendingSecretRequestForm(props: {
         </View>
       ) : null}
       {source === null ? (
-        <SecretTextInput
-          accessibilityLabel={item.label}
-          placeholder={item.placeholder ?? SECRET_REQUEST_DEFAULT_PLACEHOLDER}
-          value={secret}
-          onChangeText={setSecret}
-          editable={!submitting}
-          onSubmitEditing={(value) => void send({ type: "save", secret: value })}
-        />
+        <View className="flex-row items-center gap-1">
+          <View className="flex-1">
+            <SecretTextInput
+              accessibilityLabel={item.label}
+              placeholder={item.placeholder ?? SECRET_REQUEST_DEFAULT_PLACEHOLDER}
+              value={secret}
+              onChangeText={setSecret}
+              editable={!submitting}
+              revealed={revealed}
+              onSubmitEditing={(value) => void send({ type: "save", secret: value })}
+            />
+          </View>
+          <IconButton
+            accessibilityLabel={revealed ? `Hide ${item.label}` : `Show ${item.label}`}
+            icon={revealed ? "eye.slash" : "eye"}
+            selected={revealed}
+            disabled={submitting}
+            onPress={() => setRevealed((current) => !current)}
+          />
+        </View>
       ) : (
         <TextInput
           key={source.id}
