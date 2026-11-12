@@ -3917,6 +3917,8 @@
   "90062342f04966ff": "Mettez à jour le serveur T3 Code de cet environnement pour parcourir les pull requests.",
   "5e7157db126f1641": "Tickets indisponibles",
   "42ade0e14ff6af94": "Mettez à jour le serveur T3 Code de cet environnement pour parcourir les tickets.",
+  "68e588f6255f796f": "Masquer {label}",
+  "6435447ce7656f13": "Afficher {label}",
   "993dcd04611f9571": "Enregistrer de façon sécurisée",
   "ccbe48efc8e30c52": "Supprimer la discussion annexe « {title} » ?",
   "3a859b690f41e899": "Cela efface définitivement son historique de conversation.",

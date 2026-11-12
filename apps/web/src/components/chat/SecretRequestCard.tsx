@@ -22,8 +22,16 @@ import type {
   SecretProviderId,
 } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
-import { T, useMessages, Var } from "gt-react";
-import { CheckIcon, ExternalLinkIcon, LockIcon, MinusIcon, ShieldCheckIcon } from "lucide-react";
+import { T, useGT, useMessages, Var } from "gt-react";
+import {
+  CheckIcon,
+  ExternalLinkIcon,
+  EyeIcon,
+  EyeOffIcon,
+  LockIcon,
+  MinusIcon,
+  ShieldCheckIcon,
+} from "lucide-react";
 import { useId, useRef, useState, type FormEvent } from "react";
 
 import { isSecretsFeatureEnabled } from "../../env";
@@ -31,6 +39,7 @@ import { serverEnvironment } from "../../state/server";
 import { useAtomCommand } from "../../state/use-atom-command";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "../ui/input-group";
 import { SecretSourceSelect } from "../settings/SecretSourceInput";
 import { WorkLogRow } from "./WorkLog";
 
@@ -80,6 +89,7 @@ function PendingSecretRequestForm(props: {
 }) {
   const { item } = props;
   const messages = useMessages();
+  const gt = useGT();
   const inputId = useId();
   const errorId = useId();
   const privacyId = useId();
@@ -93,6 +103,7 @@ function PendingSecretRequestForm(props: {
   const [sourceId, setSourceId] = useState<SecretProviderId | null>(null);
   const source = sources.find((candidate) => candidate.id === sourceId) ?? null;
   const [secret, setSecret] = useState("");
+  const [revealed, setRevealed] = useState(false);
   const [reference, setReference] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -192,26 +203,47 @@ function PendingSecretRequestForm(props: {
             }}
           />
         ) : null}
-        <div className="min-w-0 flex-1">
+        {/* Hides Edge's own reveal button so only ours shows. */}
+        <div className="min-w-0 flex-1 [&_input::-ms-reveal]:hidden">
           {source === null ? (
-            <Input
-              id={inputId}
-              // A CSS-masked text field still exposes its value to screen readers.
-              type="password"
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              data-1p-ignore
-              data-lpignore="true"
-              data-bwignore
-              placeholder={item.placeholder ?? messages(SECRET_REQUEST_DEFAULT_PLACEHOLDER)}
-              value={secret}
-              disabled={submitting}
-              aria-invalid={error !== null || undefined}
-              aria-describedby={describedBy}
-              onChange={(event) => setSecret(event.currentTarget.value)}
-            />
+            <InputGroup>
+              <InputGroupInput
+                id={inputId}
+                // A CSS-masked text field still exposes its value to screen readers.
+                type={revealed ? "text" : "password"}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                data-1p-ignore
+                data-lpignore="true"
+                data-bwignore
+                placeholder={item.placeholder ?? messages(SECRET_REQUEST_DEFAULT_PLACEHOLDER)}
+                value={secret}
+                disabled={submitting}
+                aria-invalid={error !== null || undefined}
+                aria-describedby={describedBy}
+                onChange={(event) => setSecret(event.currentTarget.value)}
+              />
+              <InputGroupAddon align="inline-end">
+                <Button
+                  type="button"
+                  size="icon-xs"
+                  variant="ghost-muted"
+                  disabled={submitting}
+                  aria-label={
+                    revealed
+                      ? gt("Hide {label}", { label: item.label })
+                      : gt("Show {label}", { label: item.label })
+                  }
+                  aria-pressed={revealed}
+                  aria-controls={inputId}
+                  onClick={() => setRevealed((current) => !current)}
+                >
+                  {revealed ? <EyeOffIcon /> : <EyeIcon />}
+                </Button>
+              </InputGroupAddon>
+            </InputGroup>
           ) : (
             <Input
               id={inputId}
