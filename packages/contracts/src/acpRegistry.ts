@@ -267,6 +267,7 @@ export const AcpRegistryProbeModel = Schema.Struct({
   id: AcpRegistryProbeText,
   name: AcpRegistryProbeText,
   description: AcpRegistryProbeDescription,
+  group: Schema.optional(AcpRegistryProbeText),
 });
 export type AcpRegistryProbeModel = typeof AcpRegistryProbeModel.Type;
 
