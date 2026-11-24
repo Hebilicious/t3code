@@ -216,8 +216,12 @@ describe("LinearIssueTracker", () => {
       });
       expect(page.nextCursor).toBe("cur_2");
       expect(page.items.map((item) => [item.key, item.displayKey, item.state])).toEqual([
-        ["ENG-2", "ENG-2", { category: "closed", name: "Done", closeReason: "completed" }],
-        ["ENG-1", "ENG-1", { category: "open", name: "In Progress" }],
+        [
+          "ENG-2",
+          "ENG-2",
+          { category: "closed", name: "Done", closeReason: "completed", stage: "completed" },
+        ],
+        ["ENG-1", "ENG-1", { category: "open", name: "In Progress", stage: "started" }],
       ]);
       // A listing carries no comment totals, whatever the row's position.
       expect(page.items.map((item) => item.commentCount)).toEqual([0, 0]);

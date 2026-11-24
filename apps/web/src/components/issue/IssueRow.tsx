@@ -1,5 +1,6 @@
 import type { EnvironmentIssueEntry } from "@t3tools/client-runtime/issue-list";
-import { MessageSquareIcon } from "lucide-react";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import { FolderIcon, MessageSquareIcon } from "lucide-react";
 import { memo } from "react";
 
 import { cn } from "~/lib/utils";
@@ -41,6 +42,9 @@ function IssueRowImpl({
   onSelect: (entry: IssueRowTarget) => void;
 }) {
   const tracker = issueTrackerPresentation(entry.tracker);
+  // A git host's scope is the repository, which names the project; another tracker's scope is
+  // only its own key (`QUA`), so the row names the project instead.
+  const projectNamed = showScope && sourceControlClients.find(entry.tracker) === undefined;
   return (
     <div
       className={cn(
@@ -81,14 +85,22 @@ function IssueRowImpl({
           }
           meta={
             <>
-              <PullRequestRowAuthor actor={entry.author} />
+              {/* A tracker that names no author leaves it out, rather than a deleted account's "ghost". */}
+              {entry.author !== null ? <PullRequestRowAuthor actor={entry.author} /> : null}
               {showTracker ? (
                 <span className="inline-flex shrink-0 items-center gap-1">
                   <tracker.Icon aria-hidden className="size-3" />
                   <span className="sr-only">{tracker.providerName}</span>
                 </span>
               ) : null}
-              {showScope ? <span className="truncate">{entry.scope}</span> : null}
+              {projectNamed ? (
+                <span className="inline-flex min-w-0 items-center gap-1 text-foreground/80">
+                  <FolderIcon aria-hidden className="size-3 shrink-0" />
+                  <span className="truncate">{entry.projectTitle}</span>
+                </span>
+              ) : showScope ? (
+                <span className="truncate">{entry.scope}</span>
+              ) : null}
               {environmentLabel ? <span className="truncate">{environmentLabel}</span> : null}
               {entry.labels.length > 0 ? (
                 <span className="hidden min-w-0 items-center gap-1 @xl/issue-row-meta:flex">

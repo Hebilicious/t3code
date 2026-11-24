@@ -10,7 +10,9 @@ import * as QuadratiqueIssueTracker from "./QuadratiqueIssueTracker.ts";
 const WORKFLOW = {
   statuses: [
     { key: "todo", name: "Todo", category: "unstarted" },
+    { key: "in-progress", name: "In progress", category: "started" },
     { key: "in-review", name: "In review", category: "started" },
+    { key: "merged", name: "Merged", category: "started" },
     { key: "done", name: "Done", category: "completed" },
     { key: "canceled", name: "Canceled", category: "canceled" },
   ],
@@ -99,7 +101,8 @@ describe("QuadratiqueIssueTracker", () => {
           expect.objectContaining({
             key: "QUA-1",
             url: "http://127.0.0.1:40089/issues/QUA-1",
-            state: { category: "open", name: "In review" },
+            // The second of three started statuses sits halfway along them.
+            state: { category: "open", name: "In review", stage: "started", progress: 0.5 },
             assignees: [{ login: "human", name: null, avatarUrl: null }],
             labels: [{ name: "infra", color: null }],
           }),
@@ -150,16 +153,19 @@ describe("QuadratiqueIssueTracker", () => {
         comments: [{ author: { login: "heb" }, body: "Looks good." }],
         body: "Track the work here.\n\n## Acceptance\n\nAGENTS.md has the line.",
       });
-      expect(detail.states.map((state) => state.name)).toEqual([
-        "Todo",
-        "In review",
-        "Done",
-        "Canceled",
+      expect(detail.states.map((state) => [state.name, state.stage, state.progress])).toEqual([
+        ["Todo", "unstarted", undefined],
+        ["In progress", "started", 0.25],
+        ["In review", "started", 0.5],
+        ["Merged", "started", 0.75],
+        ["Done", "completed", undefined],
+        ["Canceled", "canceled", undefined],
       ]);
-      expect(detail.states[3]).toEqual({
+      expect(detail.states[5]).toEqual({
         category: "closed",
         name: "Canceled",
         closeReason: "canceled",
+        stage: "canceled",
       });
 
       yield* tracker.setState!({ ...target, key: "QUA-1", state: "Done" });

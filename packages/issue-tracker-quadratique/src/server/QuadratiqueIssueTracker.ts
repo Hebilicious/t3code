@@ -169,13 +169,28 @@ const REFUSAL_DETAIL: Record<string, string> = {
   BaseNotMerged: "An issue this one is stacked on is not merged yet.",
 };
 
-function toState(status: string, category: Category, workflow: ReadonlyArray<WorkflowStatus>) {
+/** A started status also says how far along the started ones it is: 1/4, 2/4, 3/4 of three. */
+function toState(
+  status: string,
+  category: Category,
+  workflow: ReadonlyArray<WorkflowStatus>,
+): IssueState {
   const name = workflow.find((each) => each.key === status)?.name ?? status;
-  const state: IssueState =
-    category === "completed" || category === "canceled"
-      ? { category: "closed", name, closeReason: category }
-      : { category: "open", name };
-  return state;
+  if (category === "completed" || category === "canceled") {
+    return {
+      category: "closed",
+      name,
+      closeReason: category,
+      stage: category,
+    } satisfies IssueState;
+  }
+  const started = workflow.filter((each) => each.category === "started");
+  const position = started.findIndex((each) => each.key === status);
+  const progress =
+    category === "started" && position >= 0
+      ? { progress: (position + 1) / (started.length + 1) }
+      : {};
+  return { category: "open", name, stage: category, ...progress } satisfies IssueState;
 }
 
 function toActor(actor: Actor): IssueActor {

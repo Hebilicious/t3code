@@ -18,6 +18,17 @@ import { pullRequestLabelColor } from "../pull-requests/pullRequestList";
 import { usePullRequestConnected } from "../pull-requests/usePullRequestConnected";
 import { issueTarget, type IssueParams } from "./issueParams";
 
+const STARTED_STEPS = [
+  { tint: "accent-adaptive-amber-700-300", text: "text-adaptive-amber-700-300" },
+  { tint: "accent-adaptive-sky-600-400", text: "text-adaptive-sky-600-400" },
+  { tint: "accent-adaptive-teal-600-400", text: "text-adaptive-teal-600-400" },
+] as const;
+
+/** The step a started state's progress is nearest, 0 to 2; without one, the middle. */
+function startedStep(progress: number | undefined): number {
+  return progress === undefined ? 1 : Math.min(2, Math.max(0, Math.round(progress * 4) - 1));
+}
+
 // Open and completed wear the pull request colors for open and merged; closed any other way
 // than completed is grey, because work that stopped must not look like work that finished.
 export function issueStatus(state: IssueState): {
@@ -27,6 +38,21 @@ export function issueStatus(state: IssueState): {
   readonly text: string;
 } {
   const label = state.name;
+  // A tracker with workflow stages draws each apart, like the web: a dashed ring for the backlog,
+  // a ring for work not started, and a dot that turns amber, sky, then teal along the started ones.
+  if (state.stage === "backlog")
+    return {
+      label,
+      icon: "circle.dashed",
+      tint: "accent-icon-muted",
+      text: "text-foreground-muted",
+    };
+  if (state.stage === "unstarted")
+    return { label, icon: "circle", tint: "accent-icon-muted", text: "text-foreground-muted" };
+  if (state.stage === "started") {
+    const step = STARTED_STEPS[startedStep(state.progress)]!;
+    return { label, icon: "circle.inset.filled", ...step };
+  }
   if (state.category === "open")
     return {
       label,

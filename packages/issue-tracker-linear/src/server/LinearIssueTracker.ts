@@ -15,6 +15,7 @@ import {
   type IssueReaction,
   type IssueReactionContent,
   type IssueState,
+  type IssueStateStage,
   type IssueTemplate,
   type IssueViewerPermissions,
   type StandaloneIssueTrackerDescriptor,
@@ -126,10 +127,23 @@ function parseIdentifier(key: string): string | null {
   return /^[A-Za-z][A-Za-z0-9]*-[1-9]\d*$/.test(key.trim()) ? key.trim().toUpperCase() : null;
 }
 
+/** Linear's state types, as stages; triage waits before the backlog and a duplicate is canceled. */
+const STAGE_BY_TYPE: Record<string, IssueStateStage> = {
+  triage: "backlog",
+  backlog: "backlog",
+  unstarted: "unstarted",
+  started: "started",
+  completed: "completed",
+  canceled: "canceled",
+  duplicate: "canceled",
+};
+
 function toState(state: LinearApi.LinearWorkflowState): IssueState {
+  const stage = STAGE_BY_TYPE[state.type];
+  const staged = stage === undefined ? {} : { stage };
   return CLOSED_STATE_TYPES.includes(state.type)
-    ? { category: "closed", name: state.name, closeReason: state.type }
-    : { category: "open", name: state.name };
+    ? { category: "closed", name: state.name, closeReason: state.type, ...staged }
+    : { category: "open", name: state.name, ...staged };
 }
 
 /**

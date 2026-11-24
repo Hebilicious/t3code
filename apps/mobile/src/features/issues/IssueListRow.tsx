@@ -1,4 +1,5 @@
 import type { EnvironmentIssueEntry } from "@t3tools/client-runtime/issue-list";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import { useGT } from "gt-react-native";
 import { memo } from "react";
 import { Pressable, View } from "react-native";
@@ -76,10 +77,13 @@ export const IssueListRow = memo(function IssueListRow(props: {
           <View className="flex-row items-center gap-1.5">
             <PullRequestAvatar actor={item.author} size={16} />
             <Text className={cn("min-w-0 flex-1 text-xs", muted)} numberOfLines={1}>
-              {/* A Linear key already names its team; a git host's number needs the repository. */}
-              {item.displayKey.startsWith(`${item.scope}-`)
-                ? item.displayKey
-                : `${item.scope} ${item.displayKey}`}
+              {/* A git host's number needs the repository; another tracker's key names only its
+                  own scope (`QUA-1`), so the project follows it. */}
+              {sourceControlClients.find(item.tracker) !== undefined
+                ? item.displayKey.startsWith(`${item.scope}-`)
+                  ? item.displayKey
+                  : `${item.scope} ${item.displayKey}`
+                : `${item.displayKey} · ${item.projectTitle}`}
             </Text>
             <Text className={cn("text-2xs tabular-nums", muted)}>
               <RelativeTime timestamp={item.updatedAt} />

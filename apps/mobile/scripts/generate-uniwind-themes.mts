@@ -148,6 +148,7 @@ const ADAPTIVE_COLORS: Readonly<Record<string, readonly [light: string, dark: st
   "--color-adaptive-sky-500-a25-400-a25": [color("sky", 500, 0.25), color("sky", 400, 0.25)],
   "--color-adaptive-sky-600-400": [color("sky", 600), color("sky", 400)],
   "--color-adaptive-sky-700-300": [color("sky", 700), color("sky", 300)],
+  "--color-adaptive-teal-600-400": [color("teal", 600), color("teal", 400)],
   "--color-adaptive-violet-500-a12-a16": [color("violet", 500, 0.12), color("violet", 500, 0.16)],
   "--color-adaptive-violet-600-400": [color("violet", 600), color("violet", 400)],
   "--color-adaptive-violet-700-300": [color("violet", 700), color("violet", 300)],
