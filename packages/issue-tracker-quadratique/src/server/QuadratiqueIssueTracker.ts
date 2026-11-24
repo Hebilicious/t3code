@@ -58,17 +58,17 @@ const AGENT_ENV: NodeJS.ProcessEnv = Object.fromEntries(
 );
 
 /**
- * Notes are comments; a status move is a state change. The rest of an issue (acceptance,
- * evidence, claims, relations) is Quadratique's own and is shown in the body, read-only here.
+ * Notes are comments; a status move is a state change. The body carries the description and an
+ * `## Acceptance` section, both written back; evidence, claims and blockers are shown read-only.
  */
 const CAPABILITIES: IssueCapabilities = {
-  create: false,
-  edit: false,
+  create: true,
+  edit: true,
   comment: true,
   labels: false,
   assignees: false,
   reactions: false,
-  templates: false,
+  templates: true,
   linkedPullRequests: false,
   events: false,
   search: true,
@@ -78,7 +78,7 @@ const CAPABILITIES: IssueCapabilities = {
 const VIEWER_PERMISSIONS: IssueViewerPermissions = {
   setState: true,
   comment: true,
-  edit: false,
+  edit: true,
   labels: false,
   assignees: false,
 };
@@ -136,6 +136,8 @@ const ListAnswer = Schema.Struct({
   nextCursor: Schema.optional(Schema.String),
 });
 const IssueAnswer = Schema.Struct({ issue: Issue });
+/** `issue.create` and `issue.update` answer a summary; only its id is read. */
+const ChangedAnswer = Schema.Struct({ issue: Schema.Struct({ id: Schema.String }) });
 
 const WorkflowStatus = Schema.Struct({
   key: Schema.String,
@@ -193,18 +195,56 @@ function assigneeFilter(login: string): string {
   );
 }
 
-/** The parts of an issue T3 Code has no field for, as markdown under the description. */
+const ACCEPTANCE = "Acceptance";
+/** Sections drawn from fields nobody edits here; a body sent back ignores them. */
+const READ_ONLY_SECTIONS = ["Evidence", "Work"];
+const SECTION = new RegExp(`^## (${[ACCEPTANCE, ...READ_ONLY_SECTIONS].join("|")})[ \\t]*$`, "m");
+
+/**
+ * The issue as one markdown body: the description, then `## Acceptance`, which a body sent back
+ * must keep, then the read-only `## Evidence` and `## Work` (its claim and blockers).
+ */
 function bodyOf(issue: Issue): string {
   const sections = [issue.description ?? ""];
-  if (issue.acceptance !== undefined) sections.push(`## Acceptance\n\n${issue.acceptance}`);
+  if (issue.acceptance !== undefined) sections.push(`## ${ACCEPTANCE}\n\n${issue.acceptance}`);
   if (issue.evidence !== undefined) sections.push(`## Evidence\n\n${issue.evidence}`);
+  const work: string[] = [];
   if (issue.claim !== undefined) {
     const branch = issue.claim.branch === undefined ? "" : ` on \`${issue.claim.branch}\``;
-    sections.push(`Claimed by **${issue.claim.holder.name}**${branch} since ${issue.claim.since}.`);
+    work.push(`Claimed by **${issue.claim.holder.name}**${branch} since ${issue.claim.since}.`);
   }
-  if (issue.blockedBy.length > 0) sections.push(`Blocked by ${issue.blockedBy.join(", ")}.`);
+  if (issue.blockedBy.length > 0) work.push(`Blocked by ${issue.blockedBy.join(", ")}.`);
+  if (work.length > 0) sections.push(`## Work\n\n${work.join("\n\n")}`);
   return sections.filter((section) => section.trim().length > 0).join("\n\n");
 }
+
+/** A body split back into Quadratique's fields; null acceptance when the section is missing or empty. */
+export function parseBody(body: string): { description: string; acceptance: string | null } {
+  const sections = new Map<string, string>();
+  let rest = body;
+  let heading = "";
+  let match = SECTION.exec(rest);
+  const description = match === null ? rest : rest.slice(0, match.index);
+  while (match !== null) {
+    rest = rest.slice(match.index + match[0].length);
+    heading = match[1]!;
+    match = SECTION.exec(rest);
+    sections.set(heading, (match === null ? rest : rest.slice(0, match.index)).trim());
+  }
+  const acceptance = sections.get(ACCEPTANCE) ?? "";
+  return { description: description.trim(), acceptance: acceptance === "" ? null : acceptance };
+}
+
+/** The draft every new issue starts from, so the composer shows where acceptance goes. */
+const TEMPLATE = {
+  key: "issue",
+  name: "Issue",
+  about: "A Quadratique issue: what to do and why, then its acceptance criteria, one per line.",
+  title: "",
+  body: `What to do, and why.\n\n## ${ACCEPTANCE}\n\n- `,
+  labels: [],
+  assignees: [],
+};
 
 function categoriesOf(state: IssueListState): ReadonlyArray<Category> {
   if (state === "open") return OPEN_CATEGORIES;
@@ -386,6 +426,13 @@ export const make = Effect.gen(function* () {
     });
   };
 
+  const missingAcceptance = (operation: string) =>
+    fail(
+      operation,
+      "failed",
+      `Quadratique needs acceptance criteria: keep a "## ${ACCEPTANCE}" section with at least one line.`,
+    );
+
   return {
     kind: KIND,
     capabilities: CAPABILITIES,
@@ -422,6 +469,49 @@ export const make = Effect.gen(function* () {
     }),
     // Quadratique gives the last 50 notes with the issue and no older page.
     getComments: () => Effect.succeed({ comments: [], nextCursor: null }),
+    listTemplates: () => Effect.succeed({ templates: [TEMPLATE], blankIssuesEnabled: false }),
+    create: Effect.fn("QuadratiqueIssueTracker.create")(function* (input) {
+      const { description, acceptance } = parseBody(input.body);
+      if (acceptance === null) return yield* missingAcceptance("create");
+      const created = yield* run(
+        "create",
+        input.cwd,
+        [
+          "issue",
+          "create",
+          "--project",
+          input.scope,
+          "--title",
+          input.title,
+          "--acceptance",
+          acceptance,
+          ...(description === "" ? [] : ["--description", description]),
+          ...input.labels.flatMap((label) => ["--labels", label]),
+        ],
+        ChangedAnswer,
+      );
+      const key = created.issue.id;
+      return { key, displayKey: key, url: yield* issueUrl(input.cwd, key) };
+    }),
+    update: Effect.fn("QuadratiqueIssueTracker.update")(function* (input) {
+      const fields: string[] = [];
+      if (input.title !== undefined) fields.push("--title", input.title);
+      if (input.body !== undefined) {
+        const { description, acceptance } = parseBody(input.body);
+        if (acceptance === null) return yield* missingAcceptance("update");
+        fields.push("--acceptance", acceptance);
+        fields.push(
+          ...(description === "" ? ["--clear", "description"] : ["--description", description]),
+        );
+      }
+      const issue = yield* getIssue(input.cwd, input.scope, input.key);
+      yield* run(
+        "update",
+        input.cwd,
+        ["issue", "update", "--issue", issue.id, "--revision", String(issue.revision), ...fields],
+        ChangedAnswer,
+      );
+    }),
     comment: (input) =>
       getIssue(input.cwd, input.scope, input.key).pipe(
         Effect.flatMap((issue) =>
@@ -438,7 +528,7 @@ export const make = Effect.gen(function* () {
               "--notes",
               input.body,
             ],
-            IssueAnswer,
+            ChangedAnswer,
           ),
         ),
         Effect.asVoid,
@@ -467,7 +557,7 @@ export const make = Effect.gen(function* () {
           "--status",
           status.key,
         ],
-        IssueAnswer,
+        ChangedAnswer,
       );
     }),
   } satisfies LocalIssueTrackerApi;

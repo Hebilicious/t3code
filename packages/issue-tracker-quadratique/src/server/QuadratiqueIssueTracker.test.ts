@@ -137,7 +137,8 @@ describe("QuadratiqueIssueTracker", () => {
     const { runs, layer } = quadratique({
       ...COMMON,
       "issue get": { stdout: { issue } },
-      "issue update": { stdout: { issue: { ...issue, status: "done", category: "completed" } } },
+      // A write answers the summary, not the whole issue.
+      "issue update": { stdout: { issue: { ...summary, status: "done", category: "completed" } } },
     });
     return Effect.gen(function* () {
       const tracker = yield* QuadratiqueIssueTracker.make;
@@ -174,6 +175,89 @@ describe("QuadratiqueIssueTracker", () => {
         "--json",
       ]);
     }).pipe(Effect.provide(layer));
+  });
+
+  it.effect(
+    "writes the description and acceptance back from the body, and refuses a body without acceptance",
+    () => {
+      const { runs, layer } = quadratique({
+        ...COMMON,
+        "issue get": { stdout: { issue: { ...issue, evidence: "Ran it." } } },
+        "issue update": { stdout: { issue: summary } },
+        "issue create": { stdout: { issue: { ...summary, id: "QUA-23" }, created: true } },
+      });
+      return Effect.gen(function* () {
+        const tracker = yield* QuadratiqueIssueTracker.make;
+        const detail = yield* tracker.getIssue({ ...target, key: "QUA-1" });
+        // The body as read goes back unchanged but for the edit; evidence is not written.
+        const edited = detail.body.replace(
+          "AGENTS.md has the line.",
+          "AGENTS.md has the line.\nCI passes.",
+        );
+        yield* tracker.update!({ ...target, key: "QUA-1", title: "Dogfood it", body: edited });
+        expect(runs.at(-1)!.args).toEqual([
+          "issue",
+          "update",
+          "--issue",
+          "QUA-1",
+          "--revision",
+          "3",
+          "--title",
+          "Dogfood it",
+          "--acceptance",
+          "AGENTS.md has the line.\nCI passes.",
+          "--description",
+          "Track the work here.",
+          "--json",
+        ]);
+
+        const refused = yield* Effect.flip(
+          tracker.update!({ ...target, key: "QUA-1", body: "Only a description." }),
+        );
+        expect(refused.detail).toContain("## Acceptance");
+
+        const { body } = (yield* tracker.listTemplates!()).templates[0]!;
+        const created = yield* tracker.create!({
+          ...target,
+          title: "New",
+          body: `${body}It works.`,
+          labels: ["infra"],
+          assignees: [],
+        });
+        expect(created).toEqual({
+          key: "QUA-23",
+          displayKey: "QUA-23",
+          url: "http://127.0.0.1:40089/issues/QUA-23",
+        });
+        expect(runs.at(-1)!.args).toEqual([
+          "issue",
+          "create",
+          "--project",
+          "QUA",
+          "--title",
+          "New",
+          "--acceptance",
+          "- It works.",
+          "--description",
+          "What to do, and why.",
+          "--labels",
+          "infra",
+          "--json",
+        ]);
+      }).pipe(Effect.provide(layer));
+    },
+  );
+
+  it("splits a body into description and acceptance, ignoring the read-only sections", () => {
+    expect(
+      QuadratiqueIssueTracker.parseBody(
+        "Why.\n\n## Acceptance\n\n- one\n- two\n\n## Evidence\n\nRan it.\n\n## Work\n\nClaimed.",
+      ),
+    ).toEqual({ description: "Why.", acceptance: "- one\n- two" });
+    expect(QuadratiqueIssueTracker.parseBody("## Acceptance\n\n")).toEqual({
+      description: "",
+      acceptance: null,
+    });
   });
 
   it.effect("refuses an issue of another project", () => {
