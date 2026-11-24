@@ -193,22 +193,37 @@ const make = Effect.gen(function* () {
     return { tracker: binding.tracker, host: api.standalone.host, scope: binding.scope };
   };
 
+  /** The local trackers that claim the project's folder, each with the scope it named. */
+  const resolveLocalBindings = (project: OrchestrationProjectShell) =>
+    Effect.forEach(registry.local, (api) =>
+      api
+        .detectScope(project.workspaceRoot)
+        .pipe(
+          Effect.map((scope): ReadonlyArray<ProjectTrackerBinding> =>
+            scope === null ? [] : [{ tracker: api.kind, host: api.localHost, scope }],
+          ),
+        ),
+    ).pipe(Effect.map((bindings) => bindings.flat()));
+
   /**
-   * Where a project's issues live: its bound standalone tracker, its git host's, or both. The
-   * tracker bound in Settings leads, as the one the user chose for the project.
+   * Where a project's issues live: its bound standalone tracker, a local tracker that claims its
+   * folder, its git host's, or several. The tracker bound in Settings leads, as the one the user
+   * chose for the project; a local tracker comes next, as one set up in the repository itself.
    */
   const resolveProjectTracker = (
     project: OrchestrationProjectShell,
     binding: IssueTrackerProjectBinding | undefined,
   ) =>
-    (project.repositoryIdentity != null
-      ? Effect.succeed(project.repositoryIdentity)
-      : repositoryIdentities.resolve(project.workspaceRoot)
-    ).pipe(
-      Effect.map((repositoryIdentity) => {
+    Effect.all([
+      project.repositoryIdentity != null
+        ? Effect.succeed(project.repositoryIdentity)
+        : repositoryIdentities.resolve(project.workspaceRoot),
+      resolveLocalBindings(project),
+    ]).pipe(
+      Effect.map(([repositoryIdentity, local]) => {
         const standalone = resolveStandaloneBinding(binding);
         const gitHost = resolveGitHostBindings({ ...project, repositoryIdentity });
-        return standalone === null ? gitHost : [standalone, ...gitHost];
+        return [...(standalone === null ? [] : [standalone]), ...local, ...gitHost];
       }),
     );
 

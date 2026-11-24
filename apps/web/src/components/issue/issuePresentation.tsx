@@ -1,6 +1,12 @@
 import type { IssueState, IssueTrackerKind } from "@t3tools/contracts";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
-import { CircleCheckIcon, CircleDotIcon, CircleSlashIcon, TicketIcon } from "lucide-react";
+import {
+  CircleCheckIcon,
+  CircleDotIcon,
+  CircleSlashIcon,
+  SquareIcon,
+  TicketIcon,
+} from "lucide-react";
 
 import { cn } from "~/lib/utils";
 import { LinearIcon, type Icon } from "~/components/Icons";
@@ -11,9 +17,10 @@ import { PULL_REQUEST_STATE_PRESENTATION } from "../pullRequest/pullRequestIcons
 
 export const IssueGlyph = { issue: CircleDotIcon } as const;
 
-/** Name and mark per standalone tracker kind; one missing here falls back to its kind and a ticket. */
+/** Name and mark per standalone or local tracker kind; one missing here falls back to its kind and a ticket. */
 const STANDALONE_TRACKERS: Partial<Record<string, { providerName: string; Icon: Icon }>> = {
   linear: { providerName: "Linear", Icon: LinearIcon },
+  quadratique: { providerName: "Quadratique", Icon: SquareIcon },
 };
 
 /** A git host's tracker wears the host's own icon and name; a standalone tracker wears its kind. */

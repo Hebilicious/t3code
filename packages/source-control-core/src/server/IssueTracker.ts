@@ -226,3 +226,22 @@ export interface StandaloneIssueTrackerApi extends IssueTrackerApi {
 export function isStandaloneIssueTracker(api: IssueTrackerApi): api is StandaloneIssueTrackerApi {
   return "standalone" in api;
 }
+
+/**
+ * A tracker that runs on this machine and knows which folders are its own: Quadratique. It needs
+ * no git host and no credential, and no setting binds a project to it: the tracker itself says
+ * which of its scopes a project's folder belongs to, if any.
+ */
+export interface LocalIssueTrackerApi extends IssueTrackerApi {
+  /** What `IssueRef.host` carries for this tracker's issues. */
+  readonly localHost: string;
+  /**
+   * The scope the folder `cwd` belongs to, or null when the tracker has none for it or is not
+   * installed. Called for every project on every listing, so it must be cheap when repeated.
+   */
+  readonly detectScope: (cwd: string) => Effect.Effect<string | null>;
+}
+
+export function isLocalIssueTracker(api: IssueTrackerApi): api is LocalIssueTrackerApi {
+  return "detectScope" in api;
+}

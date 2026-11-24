@@ -13,6 +13,7 @@ import {
 import {
   IssueTrackerError,
   type IssueTrackerApi,
+  type LocalIssueTrackerApi,
   type StandaloneIssueTrackerApi,
   type TrackerIssueDetail,
 } from "@t3tools/source-control-core/server/IssueTracker";
@@ -721,5 +722,63 @@ describe("IssueService with a standalone tracker", () => {
         operation: "listProjects",
       });
     }),
+  );
+});
+
+describe("IssueService with a local tracker", () => {
+  it.effect(
+    "lists the scope a local tracker claims for a project's folder beside its git host",
+    () =>
+      Effect.gen(function* () {
+        const QUADRATIQUE = IssueTrackerKind.make("quadratique");
+        const listed: string[] = [];
+        const local: LocalIssueTrackerApi = {
+          ...fakeTracker({
+            listIssues: (input) =>
+              Effect.sync(() => {
+                listed.push(`${input.host} ${input.scope}`);
+                return { items: [issue("WEB-1")], nextCursor: null };
+              }),
+          }),
+          kind: QUADRATIQUE,
+          localHost: "quadratique",
+          // Only the folder of `web` belongs to a Quadratique project.
+          detectScope: (cwd) => Effect.succeed(cwd === "/w/web" ? "WEB" : null),
+        };
+        const service = yield* makeService({
+          projects: [project({ id: "web", repository: "acme/web" }), project({ id: "docs" })],
+          trackers: [
+            fakeTracker({
+              listIssues: (input) =>
+                Effect.sync(() => {
+                  listed.push(`${input.host} ${input.scope}`);
+                  return { items: [], nextCursor: null };
+                }),
+            }),
+            local,
+          ],
+        });
+
+        const result = yield* service.list({ state: "open" });
+        expect(listed.sort()).toEqual(["github.com acme/web", "quadratique WEB"]);
+        expect(result.entries.map((entry) => [entry.projectId, entry.tracker, entry.key])).toEqual([
+          ["web", "quadratique", "WEB-1"],
+        ]);
+        // The local tracker leads, so it is the project's own scope for new links and filing.
+        expect(yield* service.projectScope("web" as ProjectId)).toEqual({
+          projectId: "web",
+          tracker: "quadratique",
+          host: "quadratique",
+          scope: "WEB",
+        });
+        expect(
+          yield* service.detail({
+            projectId: "web" as ProjectId,
+            tracker: QUADRATIQUE,
+            scope: "WEB",
+            key: "WEB-1",
+          }),
+        ).toMatchObject({ host: "quadratique", writable: true });
+      }),
   );
 });
