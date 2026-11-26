@@ -24,17 +24,20 @@ const TAILSCALE_TARGETS = [
 ] as const;
 
 describe("resolveRemoteOpenState", () => {
-  it("keeps exec behavior for a loopback primary target", () => {
-    expect(
-      resolveRemoteOpenState({
-        target: primaryTarget("http://127.0.0.1:8000"),
-        sshTarget: null,
-        isDesktopRenderer: false,
-        remoteOpenTargets: TAILSCALE_TARGETS,
-        hostEnvironmentId: null,
-      }),
-    ).toEqual({ mode: "local-exec" });
-  });
+  it.each(["http://127.0.0.1:8000", "http://t3.localhost"])(
+    "keeps exec behavior for a loopback primary target at %s",
+    (httpBaseUrl) => {
+      expect(
+        resolveRemoteOpenState({
+          target: primaryTarget(httpBaseUrl),
+          sshTarget: null,
+          isDesktopRenderer: false,
+          remoteOpenTargets: TAILSCALE_TARGETS,
+          hostEnvironmentId: null,
+        }),
+      ).toEqual({ mode: "local-exec" });
+    },
+  );
 
   it("uses deep links for a primary target reached over the network", () => {
     expect(
